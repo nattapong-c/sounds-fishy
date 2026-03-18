@@ -1,5 +1,6 @@
 import { Elysia } from 'elysia';
 import { cors } from '@elysiajs/cors';
+import http from 'http';
 import { Server } from 'socket.io';
 import { connectDB, disconnectDB } from './lib/database';
 import { roomController } from './controllers/room-controller';
@@ -13,20 +14,11 @@ const app = new Elysia()
   .get('/health', () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 
 // Start server
-const PORT = process.env.PORT || 3001;
+const PORT = parseInt(process.env.PORT || '3001');
 const HOST = process.env.HOST || '0.0.0.0';
 
-// Create HTTP server
-const server = app.listen(HOST, parseInt(PORT), async () => {
-  try {
-    // Connect to MongoDB
-    await connectDB();
-    console.log(`🚀 Server running on http://${HOST}:${PORT}`);
-  } catch (error) {
-    console.error('Failed to start server:', error);
-    process.exit(1);
-  }
-});
+// Create Node.js HTTP server with Elysia as request handler
+const server = http.createServer(app.handle);
 
 // Setup Socket.IO
 const io = new Server(server, {
@@ -37,6 +29,17 @@ const io = new Server(server, {
 });
 
 setupSocketIO(io);
+
+// Start listening
+server.listen(PORT, HOST, async () => {
+  try {
+    await connectDB();
+    console.log(`🚀 Server running on http://${HOST}:${PORT}`);
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+});
 
 // Graceful shutdown
 const cleanup = async () => {

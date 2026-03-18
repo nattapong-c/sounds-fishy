@@ -1,6 +1,6 @@
 import { Elysia, t } from 'elysia';
 import { RoomService } from '../services/room-service';
-import { GameRoom } from '../models/game-room';
+import GameRoom from '../models/game-room';
 import { CustomAppError } from '../lib/errors';
 
 const roomService = new RoomService();

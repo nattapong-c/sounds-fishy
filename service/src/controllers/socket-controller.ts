@@ -1,5 +1,5 @@
 import { Server as SocketIOServer } from 'socket.io';
-import { GameRoom } from '../models/game-room';
+import GameRoom from '../models/game-room';
 import { RoomService } from '../services/room-service';
 
 const roomService = new RoomService();
