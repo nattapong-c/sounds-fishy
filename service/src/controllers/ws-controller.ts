@@ -223,7 +223,7 @@ async function handleStartGame(ws: any, data: StartGameData) {
 /**
  * WebSocket controller for real-time game communication
  */
-export const wsController = new Elysia({ prefix: '/api' })
+export const wsController = new Elysia()
   .ws('/ws', {
     body: t.Object({
       type: t.String(),
