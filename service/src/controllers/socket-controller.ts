@@ -1,12 +1,21 @@
 import { Server as SocketIOServer } from 'socket.io';
+import type { Server as HTTPServer } from 'http';
 import GameRoom from '../models/game-room';
 import { RoomService } from '../services/room-service';
+import { logger } from '../lib/logger';
 
 const roomService = new RoomService();
 
-export function setupSocketIO(io: SocketIOServer) {
+export function setupSocketIO(server: HTTPServer) {
+  const io = new SocketIOServer(server, {
+    cors: {
+      origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+      methods: ['GET', 'POST']
+    }
+  });
+
   io.on('connection', (socket) => {
-    console.log(`✅ Socket connected: ${socket.id}`);
+    logger.info(`✅ Socket connected: ${socket.id}`);
 
     // Join a room
     socket.on('join_room', async (data) => {
@@ -136,7 +145,7 @@ export function setupSocketIO(io: SocketIOServer) {
 
     // Disconnect
     socket.on('disconnect', async () => {
-      console.log(`❌ Socket disconnected: ${socket.id}`);
+      logger.info(`❌ Socket disconnected: ${socket.id}`);
 
       // Find and remove player from all rooms
       try {
@@ -150,10 +159,12 @@ export function setupSocketIO(io: SocketIOServer) {
           }
         }
       } catch (error) {
-        console.error('Error handling disconnect:', error);
+        logger.error(`Error handling disconnect: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     });
   });
 
-  console.log('✅ Socket.IO setup complete');
+  logger.info('✅ Socket.IO setup complete');
+
+  return io;
 }
