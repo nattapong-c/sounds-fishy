@@ -9,13 +9,26 @@ import { roomAPI } from '@/services/api';
 
 export default function LobbyPage() {
   const router = useRouter();
-  const params = useParams();
-  const roomCode = params.roomCode as string;
-
-  const { room, isLoading, error, isConnected, isReconnecting, joinRoom, leaveRoom, toggleReady, startGame } = useRoom(roomCode);
+  const params = useParams<{ roomCode: string }>();
+  const roomCode = params.roomCode;
 
   const [playerId, setPlayerId] = useState<string | null>(null);
-  const [isReady, setIsReady] = useState(false);
+  
+  const {
+    room,
+    isLoading,
+    error,
+    isConnected,
+    joinRoom,
+    leaveRoom
+  } = useRoom(roomCode, playerId || undefined);
+
+  // Get current player data from room
+  const currentPlayer = room?.players.find(p => p.playerId === playerId);
+  const isHost = room?.hostId === playerId;
+  const isReady = currentPlayer?.isReady ?? false;
+  const allPlayersReady = room?.players.every(p => p.isReady) ?? false;
+  const canStartGame = isHost && allPlayersReady && (room?.players.length ?? 0) >= 3;
 
   // Store playerId in localStorage for persistence
   useEffect(() => {
@@ -44,7 +57,7 @@ export default function LobbyPage() {
 
     try {
       await roomAPI.toggleReady(roomCode, playerId);
-      setIsReady(!isReady);
+      // State will update via WebSocket
     } catch (err) {
       console.error('Failed to toggle ready:', err);
     }
@@ -53,7 +66,7 @@ export default function LobbyPage() {
   const handleStartGame = async () => {
     try {
       await roomAPI.startGame(roomCode);
-      // Game state will update via socket
+      // Game state will update via WebSocket
     } catch (err) {
       console.error('Failed to start game:', err);
     }
@@ -75,7 +88,7 @@ export default function LobbyPage() {
   const handleCopyCode = async () => {
     try {
       await navigator.clipboard.writeText(roomCode);
-      alert('Room code copied!');
+      // Could add toast here instead of alert
     } catch (err) {
       console.error('Failed to copy:', err);
     }
@@ -103,10 +116,6 @@ export default function LobbyPage() {
       </div>
     );
   }
-
-  const isHost = room.hostId === playerId;
-  const allPlayersReady = room.players.every(p => p.isReady);
-  const canStartGame = isHost && allPlayersReady && room.players.length >= 3;
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-ocean-50 to-ocean-100 p-4">

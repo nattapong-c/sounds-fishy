@@ -1,6 +1,9 @@
 // Centralized type definitions
 // Re-exports from models folder to maintain single source of truth
 
+// Import all model interfaces first
+import type { IGameRoom, IPlayer } from '../models/game-room';
+
 // Re-export all model interfaces
 export { IPlayer, IGameRoom } from '../models/game-room';
 

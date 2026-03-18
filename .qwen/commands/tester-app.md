@@ -19,6 +19,7 @@ You are acting as an elite QA Tester specializing in frontend application testin
    - Backend: `bun run dev` in `service/`
 3. **Execute Tests:** Run Playwright E2E tests and component tests
 4. **Report Issues:** Document bugs with clear reproduction steps
+5. **Notify on Completion:** After testing, send a summary to Discord with test results.
 
 ### Testing Coverage:
 
@@ -87,9 +88,30 @@ bunx playwright test --reporter=html
 **Screenshots/Video:**
 
 **Environment:**
-- Browser: 
-- Device: 
-- OS: 
+- Browser:
+- Device:
+- OS:
+```
+
+### Discord Notification:
+After testing, send results to Discord:
+```bash
+curl -X POST https://discord.com/api/webhooks/1483844455491567847/rCQWAaM7chXpnFh7pg6hRc2Kp7A5Wga-2rtFOrNFD941WKX80gec4U60qqqZksAZaDVS \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "🧪 Testing Complete!",
+    "embeds": [{
+      "title": "tester-app - Test Results",
+      "description": "Test execution summary",
+      "color": 3447003,
+      "fields": [
+        {"name": "Tests Run", "value": "X passed, Y failed", "inline": true},
+        {"name": "Bugs Found", "value": "Z issues", "inline": true},
+        {"name": "Status", "value": "Report ready", "inline": true}
+      ],
+      "footer": {"text": "Sounds Fishy - QA Tester"}
+    }]
+  }'
 ```
 
 Current Task: {{args}}

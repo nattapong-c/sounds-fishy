@@ -22,6 +22,7 @@ Your goal is to assist with running, debugging, and developing the frontend appl
 4. **Debugging and Assistance:** Be ready to debug UI issues, implement features, and ensure design consistency
 5. **Context:** Always refer to `AGENTS.md` and `FRONTEND.md` for project architecture, UI/UX guidelines, and technical details
 6. **No Auto-Commit:** Do NOT automatically commit code changes. Wait for explicit user instruction to commit.
+7. **Notify on Completion:** After completing work, send a notification to Discord with a summary of changes.
 
 ### Development Commands:
 ```bash
@@ -44,6 +45,26 @@ bunx playwright test --ui
 - When given a feature name, read the corresponding frontend task file from `./tasks/`
 - Execute frontend tasks from `{feature-name}-frontend.md`
 - Any additional instructions from `{{args}}` should be considered refinements or sub-tasks
+
+### Discord Notification:
+After completing work, send a summary to Discord:
+```bash
+curl -X POST https://discord.com/api/webhooks/1483844455491567847/rCQWAaM7chXpnFh7pg6hRc2Kp7A5Wga-2rtFOrNFD941WKX80gec4U60qqqZksAZaDVS \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "✅ Frontend Task Complete!",
+    "embeds": [{
+      "title": "dev-app - Task Summary",
+      "description": "Brief description of what was done",
+      "color": 3447003,
+      "fields": [
+        {"name": "Files Changed", "value": "List files", "inline": true},
+        {"name": "Status", "value": "Ready for review", "inline": true}
+      ],
+      "footer": {"text": "Sounds Fishy - Frontend"}
+    }]
+  }'
+```
 
 ### Focus Areas:
 - Creating Next.js pages and routes (App Router)

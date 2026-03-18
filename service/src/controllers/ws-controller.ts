@@ -222,44 +222,63 @@ async function handleStartGame(ws: any, data: StartGameData) {
 
 /**
  * WebSocket controller for real-time game communication
+ * Pattern from Outsider project: Query parameter authentication
  */
 export const wsController = new Elysia()
   .ws('/ws', {
+    // Query parameter validation (from Outsider pattern)
+    query: t.Object({
+      roomCode: t.String(),
+      playerId: t.Optional(t.String()),
+    }),
+    
     body: t.Object({
       type: t.String(),
       data: t.Any(),
     }),
+    
     open(ws) {
-      logger.info(`✅ WS connected: ${ws.data?.id || ws.id}`);
+      const { roomCode, playerId } = ws.data.query;
+      
+      logger.info(`✅ WS connected: room=${roomCode}, player=${playerId || 'anonymous'}`);
+      
+      // Subscribe to room channel for pub/sub
+      ws.subscribe(`room:${roomCode}`);
+      
+      // Send initial connection confirmation
+      ws.send(JSON.stringify({
+        type: 'connected',
+        data: { roomCode, playerId }
+      }));
     },
     close(ws) {
-      logger.info(`❌ WS disconnected: ${ws.data?.id || ws.id}`);
-      // Handle disconnection - remove from all rooms
-      const playerId = ws.data?.playerId;
-      const roomCode = ws.data?.roomCode;
-
+      const { roomCode, playerId } = ws.data.query;
+      
+      logger.info(`❌ WS disconnected: room=${roomCode}, player=${playerId || 'anonymous'}`);
+      
+      // Handle disconnection - remove from room
       if (playerId && roomCode) {
-        // Remove from connections
+        // Remove from connections tracking
         const connections = roomConnections.get(roomCode);
         if (connections) {
           connections.delete(ws);
         }
 
-        // Update room in database
+        // Update room in database (player offline)
         roomService.leaveRoom(roomCode, playerId).catch((err) => {
           logger.error(`Error removing player on disconnect: ${err instanceof Error ? err.message : 'Unknown error'}`);
         });
 
         // Broadcast to remaining players
         const remainingCount = connections?.size || 0;
-        ws.publish(roomCode, {
+        ws.publish(roomCode, JSON.stringify({
           type: 'player_left',
           data: {
             playerId,
             playerName: 'Player',
             remainingCount
           }
-        });
+        }));
       }
     },
     message(ws, message: WSMessage) {

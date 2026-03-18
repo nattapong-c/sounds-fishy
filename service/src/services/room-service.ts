@@ -1,4 +1,4 @@
-import GameRoom, { IPlayer } from '../models/game-room';
+import GameRoom, { IPlayer, IGameRoom } from '../models/game-room';
 import { NotFoundError, BadRequestError } from '../lib/errors';
 
 export class RoomService {

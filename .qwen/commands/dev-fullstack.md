@@ -25,12 +25,34 @@ Your goal is to assist with running, debugging, and developing both the frontend
 4. **Debugging and Assistance:** Be ready to debug issues, implement features, and answer questions spanning the frontend and backend.
 5. **Context:** Always refer to `AGENTS.md`, `FRONTEND.md`, and `BACKEND.md` for project architecture, game rules, UI/UX guidelines, and technical details.
 6. **No Auto-Commit:** Do NOT automatically commit code changes. Wait for explicit user instruction to commit.
+7. **Notify on Completion:** After completing work, send a notification to Discord with a summary of changes.
 
 ### Task Execution:
 - When given a feature name, read the corresponding task files from `./tasks/`
 - Execute backend tasks from `{feature-name}-backend.md` (use `backend-bun-expert` agent)
 - Execute frontend tasks from `{feature-name}-frontend.md` (use `frontend-nextjs-expert` agent)
 - Any additional instructions from `{{args}}` should be considered refinements or sub-tasks
+
+### Discord Notification:
+After completing work, send a summary to Discord:
+```bash
+curl -X POST https://discord.com/api/webhooks/1483844455491567847/rCQWAaM7chXpnFh7pg6hRc2Kp7A5Wga-2rtFOrNFD941WKX80gec4U60qqqZksAZaDVS \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "✅ Full-Stack Task Complete!",
+    "embeds": [{
+      "title": "dev-fullstack - Task Summary",
+      "description": "Brief description of what was done",
+      "color": 3447003,
+      "fields": [
+        {"name": "Backend Files", "value": "List backend files", "inline": true},
+        {"name": "Frontend Files", "value": "List frontend files", "inline": true},
+        {"name": "Status", "value": "Ready for review", "inline": true}
+      ],
+      "footer": {"text": "Sounds Fishy - Full-Stack"}
+    }]
+  }'
+```
 
 ### When to Use Specialist Agents:
 

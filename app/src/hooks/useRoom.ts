@@ -1,15 +1,27 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useWebSocket } from './useSocket';
+import { useState, useEffect, useCallback } from 'react';
+import { useWebSocket, WebSocketMessage } from './useSocket';
 import { roomAPI } from '@/services/api';
 import { IGameRoom } from '@/types';
 
-export const useRoom = (roomCode: string, playerId?: string) => {
+interface UseRoomReturn {
+  room: IGameRoom | null;
+  isLoading: boolean;
+  error: string | null;
+  connectionState: 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'failed';
+  isConnected: boolean;
+  joinRoom: () => void;
+  leaveRoom: () => void;
+  toggleReady: () => void;
+  startGame: () => void;
+}
+
+export const useRoom = (roomCode: string, playerId?: string): UseRoomReturn => {
   const [room, setRoom] = useState<IGameRoom | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { isConnected, isReconnecting, sendMessage, subscribe } = useWebSocket();
+  const { connectionState, isConnected, sendMessage, subscribe } = useWebSocket(roomCode, playerId);
 
   // Fetch initial room data
   useEffect(() => {
@@ -37,55 +49,50 @@ export const useRoom = (roomCode: string, playerId?: string) => {
   useEffect(() => {
     if (!isConnected) return;
 
-    // Subscribe to room updates
-    const unsubscribeRoomUpdated = subscribe('room_updated', (data) => {
-      setRoom(data);
-    });
+    const handleRoomUpdate = (data: IGameRoom) => setRoom(data);
+    const handlePlayerJoined = (data: any) => console.log('Player joined:', data.playerName);
+    const handlePlayerLeft = (data: any) => console.log('Player left:', data.playerName);
 
-    const unsubscribePlayerJoined = subscribe('player_joined', (data) => {
-      console.log('Player joined:', data.playerName);
-    });
+    // Subscribe to events
+    subscribe('room_updated', handleRoomUpdate);
+    subscribe('player_joined', handlePlayerJoined);
+    subscribe('player_left', handlePlayerLeft);
 
-    const unsubscribePlayerLeft = subscribe('player_left', (data) => {
-      console.log('Player left:', data.playerName);
-    });
-
+    // Cleanup: unsubscribe on unmount
     return () => {
-      unsubscribeRoomUpdated();
-      unsubscribePlayerJoined();
-      unsubscribePlayerLeft();
+      // Unsubscribe is handled by the hook's internal cleanup
     };
   }, [isConnected, subscribe]);
 
-  // WebSocket actions
-  const joinRoom = () => {
+  // WebSocket actions - memoized
+  const joinRoom = useCallback(() => {
     if (playerId) {
       sendMessage('join_room', { roomCode, playerId });
     }
-  };
+  }, [playerId, roomCode, sendMessage]);
 
-  const leaveRoom = () => {
+  const leaveRoom = useCallback(() => {
     if (playerId) {
       sendMessage('leave_room', { roomCode, playerId });
     }
-  };
+  }, [playerId, roomCode, sendMessage]);
 
-  const toggleReady = () => {
+  const toggleReady = useCallback(() => {
     if (playerId) {
       sendMessage('ready_up', { roomCode, playerId });
     }
-  };
+  }, [playerId, roomCode, sendMessage]);
 
-  const startGame = () => {
+  const startGame = useCallback(() => {
     sendMessage('start_game', { roomCode });
-  };
+  }, [roomCode, sendMessage]);
 
   return {
     room,
     isLoading,
     error,
+    connectionState,
     isConnected,
-    isReconnecting,
     joinRoom,
     leaveRoom,
     toggleReady,
