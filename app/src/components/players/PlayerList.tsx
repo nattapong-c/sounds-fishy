@@ -19,9 +19,12 @@ const PlayerList: React.FC<PlayerListProps> = ({
         <PlayerCard
           key={player.playerId}
           playerName={player.name}
-          isHost={player.playerId === hostId}
+          isHost={player.isHost}
+          inGameRole={player.inGameRole}
+          isOnline={player.isOnline}
           isReady={player.isReady}
           isCurrentPlayer={player.playerId === currentUserId}
+          lastSeen={player.lastSeen}
           animationDelay={index * 100}
         />
       ))}

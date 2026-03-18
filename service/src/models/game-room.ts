@@ -3,11 +3,14 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface IPlayer {
   playerId: string;
   name: string;
-  role: 'guesser' | 'bigFish' | 'redHerring' | 'host';
+  isHost: boolean;                    // Separate host flag
+  inGameRole: 'guesser' | 'bigFish' | 'redHerring' | null; // Game role (separate from host)
+  isOnline: boolean;                  // Connection status
   score: number;
   isReady: boolean;
   generatedLie?: string;
   eliminatedInRound?: number;
+  lastSeen?: Date;                    // Last activity timestamp
 }
 
 export interface IGameRoom extends Document {
@@ -39,15 +42,18 @@ export interface IGameRoom extends Document {
 const PlayerSchema = new Schema<IPlayer>({
   playerId: { type: String, required: true },
   name: { type: String, required: true },
-  role: {
+  isHost: { type: Boolean, default: false },  // Separate host flag
+  inGameRole: {
     type: String,
-    enum: ['guesser', 'bigFish', 'redHerring', 'host'],
-    default: 'host'
+    enum: ['guesser', 'bigFish', 'redHerring', null],
+    default: null
   },
+  isOnline: { type: Boolean, default: false }, // Connection status
   score: { type: Number, default: 0 },
   isReady: { type: Boolean, default: false },
   generatedLie: { type: String },
-  eliminatedInRound: { type: Number }
+  eliminatedInRound: { type: Number },
+  lastSeen: { type: Date, default: Date.now }  // Activity tracking
 });
 
 const GameRoomSchema = new Schema<IGameRoom>({

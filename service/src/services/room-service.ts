@@ -7,6 +7,7 @@ import { NotFoundError, BadRequestError } from '../lib/errors';
 export interface LeaveRoomResult {
   roomDeleted: boolean;
   newHostId?: string | null;
+  wasDisconnected: boolean; // Track if disconnect vs explicit leave
 }
 
 export class RoomService {
@@ -35,7 +36,9 @@ export class RoomService {
       players: [{
         playerId: hostId,
         name: hostName,
-        role: 'host',
+        isHost: true,
+        inGameRole: null,
+        isOnline: true,
         score: 0,
         isReady: false
       }]
@@ -63,7 +66,9 @@ export class RoomService {
     const newPlayer: IPlayer = {
       playerId,
       name: playerName,
-      role: 'host', // Temporary, will be reassigned on game start
+      isHost: false,
+      inGameRole: null,
+      isOnline: true,
       score: 0,
       isReady: false
     };
@@ -76,64 +81,92 @@ export class RoomService {
 
   /**
    * Remove player from room
-   * @returns Object with roomDeleted flag and newHostId if applicable
-   * 
+   * @param isDisconnect - true if player disconnected (refresh/close), false if explicit leave
+   * @returns Object with roomDeleted flag, newHostId if applicable, and wasDisconnected flag
+   *
    * Host Transfer Logic:
    * - If leaving player is host:
-   *   - If 1+ players remain: Transfer host to first non-host player
-   *   - If no players remain: Delete room
+   *   - If 1+ players remain AND explicit leave: Transfer host to first non-host player
+   *   - If 1+ players remain AND disconnect: Keep host, mark as offline
+   *   - If no players remain AND explicit leave: Delete room
+   *   - If no players remain AND disconnect: Keep room, mark host as offline
    * - If leaving player is not host:
-   *   - Just remove player
+   *   - If explicit leave: Remove player from room
+   *   - If disconnect: Mark player as offline
    */
-  async leaveRoom(roomCode: string, playerId: string): Promise<LeaveRoomResult> {
+  async leaveRoom(roomCode: string, playerId: string, isDisconnect: boolean = false): Promise<LeaveRoomResult> {
     const room = await GameRoom.findOne({ roomCode: roomCode.toUpperCase() });
     if (!room) {
-      return { roomDeleted: false, newHostId: null };
+      return { roomDeleted: false, newHostId: null, wasDisconnected: false };
     }
 
-    const isHostLeaving = playerId === room.hostId;
-    const remainingPlayers = room.players.filter(p => p.playerId !== playerId);
+    const player = room.players.find(p => p.playerId === playerId);
+    if (!player) {
+      return { roomDeleted: false, newHostId: null, wasDisconnected: false };
+    }
 
-    // Case 1: Host is leaving
-    if (isHostLeaving) {
-      // Check if there are remaining players
-      if (remainingPlayers.length > 0) {
-        // Transfer host to first non-host player (first player in array that's not leaving)
-        const newHost = remainingPlayers[0];
-        room.hostId = newHost.playerId;
-        room.players = remainingPlayers;
-        await room.save();
-        
-        return {
-          roomDeleted: false,
-          newHostId: newHost.playerId
-        };
-      } else {
-        // No remaining players - delete the room
+    const isHostLeaving = player.isHost;
+
+    // CRITICAL BUG FIX: Only delete room on explicit leave, not disconnect
+    if (room.players.length === 1 && isHostLeaving) {
+      if (!isDisconnect) {
+        // Host explicitly leaving last player room - delete it
         await GameRoom.deleteOne({ _id: room._id });
-        return {
-          roomDeleted: true,
-          newHostId: null
-        };
+        return { roomDeleted: true, newHostId: null, wasDisconnected: isDisconnect };
+      } else {
+        // Host disconnected - keep room alive, mark as offline
+        player.isOnline = false;
+        player.lastSeen = new Date();
+        await room.save();
+        return { roomDeleted: false, newHostId: playerId, wasDisconnected: isDisconnect };
       }
     }
 
-    // Case 2: Non-host is leaving
+    // Handle disconnect vs explicit leave
+    if (isDisconnect) {
+      // Just mark as offline, don't remove from room
+      player.isOnline = false;
+      player.lastSeen = new Date();
+      await room.save();
+
+      // If host disconnects and there are other players, keep host flag but mark offline
+      return {
+        roomDeleted: false,
+        newHostId: isHostLeaving ? playerId : null,
+        wasDisconnected: isDisconnect
+      };
+    }
+
+    // Explicit leave - remove player from room
+    const remainingPlayers = room.players.filter(p => p.playerId !== playerId);
+
+    // Host Transfer Logic
+    let newHostId: string | null = null;
+    if (isHostLeaving && remainingPlayers.length > 0) {
+      // Transfer host to first non-host player
+      const newHost = remainingPlayers.find(p => !p.isHost) || remainingPlayers[0];
+      newHost.isHost = true;
+      newHostId = newHost.playerId;
+      room.hostId = newHostId;
+    }
+
     room.players = remainingPlayers;
     await room.save();
 
-    // Check if this was the last player (edge case - shouldn't happen with proper host transfer)
+    // Edge case: if no players remain after explicit leave (shouldn't happen with proper host transfer)
     if (remainingPlayers.length === 0) {
       await GameRoom.deleteOne({ _id: room._id });
       return {
         roomDeleted: true,
-        newHostId: null
+        newHostId: null,
+        wasDisconnected: isDisconnect
       };
     }
 
     return {
       roomDeleted: false,
-      newHostId: null
+      newHostId,
+      wasDisconnected: isDisconnect
     };
   }
 
@@ -160,16 +193,54 @@ export class RoomService {
   }
 
   /**
+   * Mark player as disconnected (not left)
+   */
+  async markDisconnected(roomCode: string, playerId: string): Promise<void> {
+    const room = await GameRoom.findOne({ roomCode: roomCode.toUpperCase() });
+    if (!room) return;
+
+    const player = room.players.find(p => p.playerId === playerId);
+    if (player) {
+      player.isOnline = false;
+      player.lastSeen = new Date();
+      await room.save();
+    }
+  }
+
+  /**
+   * Mark player as reconnected
+   */
+  async markReconnected(roomCode: string, playerId: string): Promise<void> {
+    const room = await GameRoom.findOne({ roomCode: roomCode.toUpperCase() });
+    if (!room) return;
+
+    const player = room.players.find(p => p.playerId === playerId);
+    if (player) {
+      player.isOnline = true;
+      player.lastSeen = new Date();
+      await room.save();
+    }
+  }
+
+  /**
    * Assign roles for game start
+   * CRITICAL: Host is separate from game roles - host does not get a game role
    */
   assignRoles(players: IPlayer[]): void {
     const shuffled = [...players].sort(() => Math.random() - 0.5);
 
-    shuffled[0].role = 'guesser';
-    shuffled[1].role = 'bigFish';
+    // Separate host from role assignment - host doesn't get a game role
+    const host = shuffled.find(p => p.isHost);
+    const nonHostPlayers = shuffled.filter(p => !p.isHost);
 
-    for (let i = 2; i < shuffled.length; i++) {
-      shuffled[i].role = 'redHerring';
+    // Only assign game roles if we have at least 2 non-host players
+    if (nonHostPlayers.length >= 2) {
+      nonHostPlayers[0].inGameRole = 'guesser';
+      nonHostPlayers[1].inGameRole = 'bigFish';
+
+      for (let i = 2; i < nonHostPlayers.length; i++) {
+        nonHostPlayers[i].inGameRole = 'redHerring';
+      }
     }
   }
 
@@ -181,8 +252,10 @@ export class RoomService {
     if (!room) {
       throw new NotFoundError('Room not found');
     }
-    if (room.players.length < 3) {
-      throw new BadRequestError('Need at least 3 players to start');
+    // Count non-host players for minimum requirement
+    const nonHostPlayers = room.players.filter(p => !p.isHost);
+    if (nonHostPlayers.length < 2) {
+      throw new BadRequestError('Need at least 2 non-host players (3 total with host) to start');
     }
 
     // Assign roles
