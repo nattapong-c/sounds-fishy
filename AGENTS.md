@@ -11,9 +11,10 @@ A digital "Secret Screen" companion app for the "Sounds Fishy" board game. Desig
 
 ## 2. Tech Stack
 - **Frontend:** Next.js (App Router), Tailwind CSS, Playwright (Testing), Vercel (Hosting)
-- **Backend:** Bun, ElysiaJS, Socket.io (Real-time), MongoDB (Persistence), Render (Hosting)
-- **State Management:** MongoDB (No Redis, No In-memory storage)
+- **Backend:** Bun, ElysiaJS (with built-in WebSocket), MongoDB (Persistence), Render (Hosting)
+- **State Management:** MongoDB (No Redis, No In-memory storage) - Single source of truth
 - **AI Integration:** OpenAI-compatible LLM API (configurable API key, model, base URL)
+- **Real-time Communication:** ElysiaJS WebSocket (Pub/Sub pattern, query parameter authentication)
 
 ---
 
@@ -45,8 +46,10 @@ A digital "Secret Screen" companion app for the "Sounds Fishy" board game. Desig
    - Correct answer (for Big Fish)
    - Set of believable bluff answers (for Red Herrings to reference)
 
+**Routing:** `/room/{roomCode}` (dual-purpose: join form or room view)
+
 ### Phase 2: The Briefing (Secret Info)
-1. Server emits `START_ROUND` via Socket.io with unique payloads.
+1. Server emits `start_round` via WebSocket with unique payloads.
 2. **Guesser Screen:** Displays the Question. They read it out loud.
 3. **Others Screen:** Displays "Tap to Reveal" button.
     - **Big Fish** sees the question + the correct answer (AI-generated).
@@ -59,7 +62,7 @@ A digital "Secret Screen" companion app for the "Sounds Fishy" board game. Desig
 
 ### Phase 4: Elimination (Interactive)
 1. Guesser selects a player on their phone to eliminate.
-2. **Socket Broadcast:** Server checks the role and sends `REVEAL_RESULT` to everyone.
+2. **WebSocket Broadcast:** Server checks the role and sends `reveal_result` to everyone.
 3. **Visual Result:** Every phone vibrates/animates showing if it was a "Red Herring" or "Big Fish."
 4. **Logic Loop:**
     - If **Red Herring**: Guesser chooses to **"Continue"** (higher points) or **"Bank"** (end round).

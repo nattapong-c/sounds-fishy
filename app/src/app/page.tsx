@@ -6,14 +6,22 @@ import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import { roomAPI } from '@/services/api';
 
+type FormMode = 'none' | 'create' | 'join';
+
 export default function Home() {
   const router = useRouter();
+  const [formMode, setFormMode] = useState<FormMode>('none');
+  
+  // Create form state
   const [hostName, setHostName] = useState('');
+  
+  // Join form state
   const [roomCode, setRoomCode] = useState('');
   const [playerName, setPlayerName] = useState('');
+  
+  // Common state
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showJoinModal, setShowJoinModal] = useState(false);
 
   const handleCreateRoom = async () => {
     if (!hostName.trim()) {
@@ -27,7 +35,10 @@ export default function Home() {
     try {
       const response = await roomAPI.createRoom({ hostName: hostName.trim() });
       if (response.success) {
-        router.push(`/room/${response.data.roomCode}/lobby`);
+        // Store playerId (hostId) for WebSocket authentication
+        localStorage.setItem('playerId', response.data.hostId);
+        // Redirect directly to room (no suffix)
+        router.push(`/room/${response.data.roomCode}`);
       }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to create room');
@@ -50,13 +61,23 @@ export default function Home() {
         playerName: playerName.trim(),
       });
       if (response.success) {
-        router.push(`/room/${roomCode.trim().toUpperCase()}/lobby`);
+        // Store playerId for WebSocket
+        localStorage.setItem('playerId', response.data.playerId);
+        router.push(`/room/${response.data.roomCode}`);
       }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to join room');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const resetForm = () => {
+    setFormMode('none');
+    setHostName('');
+    setRoomCode('');
+    setPlayerName('');
+    setError('');
   };
 
   return (
@@ -73,54 +94,64 @@ export default function Home() {
           <p className="text-gray-600">Digital Companion App</p>
         </div>
 
-        {/* Action buttons */}
-        <div className="space-y-4">
-          <Button
-            variant="primary"
-            size="lg"
-            className="w-full"
-            onClick={() => setShowJoinModal(false)}
-            isLoading={isLoading && !showJoinModal}
-          >
-            Create Room
-          </Button>
+        {/* Show buttons when no form is active */}
+        {formMode === 'none' && (
+          <div className="space-y-4">
+            <Button
+              variant="primary"
+              size="lg"
+              className="w-full"
+              onClick={() => setFormMode('create')}
+            >
+              Create Room
+            </Button>
 
-          <Button
-            variant="secondary"
-            size="lg"
-            className="w-full"
-            onClick={() => setShowJoinModal(true)}
-          >
-            Join Room
-          </Button>
-        </div>
+            <Button
+              variant="secondary"
+              size="lg"
+              className="w-full"
+              onClick={() => setFormMode('join')}
+            >
+              Join Room
+            </Button>
+          </div>
+        )}
 
         {/* Create room form */}
-        {!showJoinModal && (
+        {formMode === 'create' && (
           <div className="card space-y-4 animate-slide-in-left">
-            <h2 className="text-xl font-semibold text-center">Enter your name</h2>
+            <h2 className="text-xl font-semibold text-center">Create New Room</h2>
             <Input
-              placeholder="Your name"
+              placeholder="Your name (as host)"
               value={hostName}
               onChange={(e) => setHostName(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleCreateRoom()}
             />
             {error && <p className="text-red-600 text-sm text-center">{error}</p>}
-            <Button
-              variant="primary"
-              className="w-full"
-              onClick={handleCreateRoom}
-              isLoading={isLoading}
-            >
-              Create & Host
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                className="flex-1"
+                onClick={resetForm}
+              >
+                Back
+              </Button>
+              <Button
+                variant="primary"
+                className="flex-1"
+                onClick={handleCreateRoom}
+                isLoading={isLoading}
+              >
+                Create & Host
+              </Button>
+            </div>
           </div>
         )}
 
         {/* Join room form */}
-        {showJoinModal && (
+        {formMode === 'join' && (
           <div className="card space-y-4 animate-slide-in-right">
-            <h2 className="text-xl font-semibold text-center">Join existing room</h2>
+            <h2 className="text-xl font-semibold text-center">Join Existing Room</h2>
             <Input
               placeholder="Room code"
               value={roomCode}
@@ -138,10 +169,7 @@ export default function Home() {
               <Button
                 variant="ghost"
                 className="flex-1"
-                onClick={() => {
-                  setShowJoinModal(false);
-                  setError('');
-                }}
+                onClick={resetForm}
               >
                 Back
               </Button>
@@ -151,7 +179,7 @@ export default function Home() {
                 onClick={handleJoinRoom}
                 isLoading={isLoading}
               >
-                Join
+                Join Room
               </Button>
             </div>
           </div>

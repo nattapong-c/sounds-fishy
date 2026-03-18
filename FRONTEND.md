@@ -4,13 +4,13 @@
 This document outlines the frontend architecture, technologies, and key conventions for the **Sounds Fishy** (FishyBusiness Digital) application. The frontend serves as the player's "secret screen" companion, displaying role-specific information and facilitating real-time game interaction.
 
 ## 🛠 Technology Stack
-*   **Framework:** Next.js (App Router)
+*   **Framework:** Next.js 14 (App Router)
 *   **Language:** TypeScript
 *   **UI Library:** React
 *   **Styling:** TailwindCSS
 *   **HTTP Client:** Axios (for REST API requests)
-*   **Real-time:** Native WebSocket API (ElysiaWS)
-*   **Testing:** Playwright
+*   **Real-time:** Native WebSocket API (ElysiaJS built-in WebSocket)
+*   **Testing:** Playwright (E2E), Bun.test (components)
 *   **Hosting:** Vercel
 *   **Package Manager/Runtime:** Bun (for development and build)
 *   **AI Integration:** OpenAI-compatible LLM API UI (configurable settings, generation status, error handling)
@@ -217,16 +217,15 @@ const GameRoomPage: React.FC = () => {
 ## 📂 Project Structure
 
 ### `app/src/app/` (Next.js App Router)
-*   **`/`**: Landing page with options to create or join a room.
-*   **`/create`**: Room creation flow.
-*   **`/room/[roomCode]`**: Dynamic route for active game room.
-*   **`/room/[roomCode]/lobby`**: Lobby waiting area.
-*   **`/room/[roomCode]/briefing`**: Role briefing screen (secret info with AI-generated content).
-*   **`/room/[roomCode]/settings`**: Game settings (host-only AI configuration).
-*   **`/room/[roomCode]/elimination`**: Elimination phase UI.
-*   **`/room/[roomCode]/summary`**: Round summary and leaderboard.
-*   **`layout.tsx`**: Root layout for the application.
-*   **`page.tsx`**: Landing page entry point.
+*   **`/`**: Landing page with create/join buttons (forms appear after button click)
+*   **`/room/[roomCode]`**: Dual-purpose route:
+    - **No playerId**: Shows join name entry form
+    - **Has playerId**: Shows room view (lobby, player list, ready button)
+*   **`/room/[roomCode]/briefing`**: Role briefing screen (AI-generated content) - Future
+*   **`/room/[roomCode]/elimination`**: Elimination phase UI - Future
+*   **`/room/[roomCode]/summary`**: Round summary and leaderboard - Future
+*   **`layout.tsx`**: Root layout for the application
+*   **`page.tsx`**: Landing page entry point
 
 ### `app/src/components/`
 *   **Atomic Design Principles**: Components organized into atoms, molecules, organisms.

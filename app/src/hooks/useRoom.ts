@@ -50,8 +50,17 @@ export const useRoom = (roomCode: string, playerId?: string): UseRoomReturn => {
     if (!isConnected) return;
 
     const handleRoomUpdate = (data: IGameRoom) => setRoom(data);
-    const handlePlayerJoined = (data: any) => console.log('Player joined:', data.playerName);
-    const handlePlayerLeft = (data: any) => console.log('Player left:', data.playerName);
+    const handlePlayerJoined = (data: any) => {
+      // Only log once, not on every room update
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Player joined:', data.playerName);
+      }
+    };
+    const handlePlayerLeft = (data: any) => {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Player left:', data.playerName);
+      }
+    };
 
     // Subscribe to events
     subscribe('room_updated', handleRoomUpdate);

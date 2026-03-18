@@ -4,12 +4,13 @@
 This document details the backend architecture, services, and data models for the **Sounds Fishy** (FishyBusiness Digital) application. The backend handles game logic, real-time communication via WebSockets, and data persistence in MongoDB.
 
 ## 🛠 Technology Stack
-*   **Framework:** ElysiaJS
-*   **Runtime:** Bun
+*   **Framework:** ElysiaJS (with built-in WebSocket)
+*   **Runtime:** Bun (v1.0.0+)
 *   **Database:** MongoDB (via Mongoose ODM) - **Single source of truth for all data**
-*   **Language:** TypeScript
-*   **Real-time Communication:** ElysiaJS Built-in WebSocket (Elysia.ws())
+*   **Language:** TypeScript (strict mode)
+*   **Real-time Communication:** ElysiaJS Built-in WebSocket (Pub/Sub pattern)
 *   **AI Integration:** OpenAI-compatible LLM API (configurable API key, model, base URL)
+*   **Hosting:** Render
 
 ## ✍️ Naming Convention Guidelines (TypeScript Best Practices)
 Adhering to consistent naming conventions improves code readability and maintainability.
@@ -215,6 +216,11 @@ describe('WebSocket Events', () => {
 
 ## 📂 Project Structure
 
+### File Naming Convention
+All files use **kebab-case** naming:
+- ✅ `room-controller.ts`, `game-room.ts`, `room-service.ts`
+- ❌ `roomController.ts`, `GameRoom.ts`, `roomService.ts`
+
 ### `service/src/models/`
 **Single Source of Truth for TypeScript Interfaces and Mongoose Models**
 - **Mongoose Schemas**: Define structure and validation for MongoDB documents.
@@ -293,13 +299,12 @@ export type GameStatus = 'lobby' | 'briefing' | 'pitch' | 'elimination' | 'round
 
 **Responsibilities:**
 - Role distribution (1 Guesser, 1 Big Fish, rest Red Herrings).
-- Secret word selection from word bank.
-- Scoring system (elimination points, banking, bust logic).
-- Round rotation and phase management.
+- Room code generation.
+- Host transfer logic.
+- Room auto-deletion.
 
 **Files:**
 - `room-service.ts`: Room management and game logic
-- `word-bank-service.ts`: Word/answer generation utilities
 
 ### `service/src/lib/`
 **Utilities and Infrastructure**
@@ -313,18 +318,185 @@ export type GameStatus = 'lobby' | 'briefing' | 'pitch' | 'elimination' | 'round
 - Initializes the Elysia server.
 - Registers REST routes and WebSocket handlers.
 - Connects to MongoDB.
+- Configures CORS.
 
 ## 🚀 API Endpoints (REST & WebSockets)
 
-### REST Endpoints (Example)
-*   `POST /rooms`: Create a new game room.
-*   `GET /rooms/:roomCode`: Get details of a specific room.
-*   `POST /rooms/:roomCode/join`: Join a game room.
-*   `POST /rooms/:roomCode/start`: Start the game (host only).
+### REST Endpoints
+
+All REST endpoints are prefixed with `/api`.
+
+#### **POST /api/rooms** - Create Room
+Create a new game room.
+
+**Request:**
+```json
+{
+  "hostName": "Player One"
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "roomId": "507f1f77bcf86cd799439011",
+    "roomCode": "FISH42",
+    "hostId": "player-123"
+  }
+}
+```
+
+**Error (400):**
+```json
+{
+  "success": false,
+  "error": "Host name is required"
+}
+```
+
+---
+
+#### **GET /api/rooms/:roomCode** - Get Room
+Retrieve room details and current state.
+
+**Parameters:**
+- `roomCode` (path) - 6-character room code (case-insensitive)
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "507f1f77bcf86cd799439011",
+    "roomCode": "FISH42",
+    "hostId": "player-123",
+    "status": "lobby",
+    "players": [...],
+    "currentRound": 1
+  }
+}
+```
+
+**Error (404):**
+```json
+{
+  "success": false,
+  "error": "Room not found"
+}
+```
+
+---
+
+#### **POST /api/rooms/:roomCode/join** - Join Room
+Join an existing game room.
+
+**Parameters:**
+- `roomCode` (path) - 6-character room code
+
+**Request:**
+```json
+{
+  "playerName": "Player Two"
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "playerId": "player-456",
+    "roomCode": "FISH42"
+  }
+}
+```
+
+---
+
+#### **POST /api/rooms/:roomCode/leave** - Leave Room
+Leave a game room.
+
+**Parameters:**
+- `roomCode` (path) - 6-character room code
+
+**Request:**
+```json
+{
+  "playerId": "player-456"
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true
+}
+```
+
+**Host Transfer Logic:**
+- If the host leaves, host privileges are automatically transferred to the first remaining player
+- If the last player leaves, the room is deleted from MongoDB
+
+---
+
+#### **POST /api/rooms/:roomCode/ready** - Toggle Ready
+Toggle a player's ready status.
+
+**Parameters:**
+- `roomCode` (path) - 6-character room code
+
+**Request:**
+```json
+{
+  "playerId": "player-456"
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "allReady": true
+  }
+}
+```
+
+---
+
+#### **POST /api/rooms/:roomCode/start** - Start Game
+Start the game (host only).
+
+**Parameters:**
+- `roomCode` (path) - 6-character room code
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "roomCode": "FISH42",
+    "status": "briefing"
+  }
+}
+```
+
+---
 
 ### WebSocket Events
 
 **Connection Endpoint:** `ws://<host>:<port>/ws`
+
+**Query Parameters:**
+- `roomCode` (required) - Room code to join
+- `playerId` (optional) - Player identifier
+
+**Example Connection:**
+```javascript
+const ws = new WebSocket('ws://localhost:3001/ws?roomCode=FISH42&playerId=player-123');
+```
 
 **Message Format:**
 All WebSocket messages follow a standard format:
@@ -337,7 +509,7 @@ All WebSocket messages follow a standard format:
 
 #### **Client to Server Events:**
 
-1. **`join_room`** - Player joins a room
+1. **`join_room`** - Player joins a room's WebSocket channel
 ```typescript
 {
   type: 'join_room';
@@ -376,59 +548,32 @@ All WebSocket messages follow a standard format:
   type: 'start_game';
   data: {
     roomCode: string;
-    hostId: string;
-  };
-}
-```
-
-5. **`generate_lie`** - Red Herring requests AI-generated lie
-```typescript
-{
-  type: 'generate_lie';
-  data: {
-    roomCode: string;
-    playerId: string;
-  };
-}
-```
-
-6. **`eliminate_player`** - Guesser selects a player to eliminate
-```typescript
-{
-  type: 'eliminate_player';
-  data: {
-    roomCode: string;
-    targetPlayerId: string;
-  };
-}
-```
-
-7. **`bank_points`** - Guesser banks accumulated points
-```typescript
-{
-  type: 'bank_points';
-  data: {
-    roomCode: string;
   };
 }
 ```
 
 #### **Server to Client Events:**
 
-1. **`room_updated`** - Broadcasts room state changes
+1. **`connected`** - Initial WebSocket connection confirmation
 ```typescript
 {
-  type: 'room_updated';
+  type: 'connected';
   data: {
     roomCode: string;
-    players: IPlayer[];
-    status: string;
-    currentRound: number;
+    playerId?: string;
   };
 }
 ```
 
-2. **`player_joined`** - New player joined the room
+2. **`room_updated`** - Broadcasts room state changes
+```typescript
+{
+  type: 'room_updated';
+  data: IGameRoom;  // Full room object
+}
+```
+
+3. **`player_joined`** - New player joined the room
 ```typescript
 {
   type: 'player_joined';
@@ -440,7 +585,7 @@ All WebSocket messages follow a standard format:
 }
 ```
 
-3. **`player_left`** - Player left the room
+4. **`player_left`** - Player left the room
 ```typescript
 {
   type: 'player_left';
@@ -448,11 +593,55 @@ All WebSocket messages follow a standard format:
     playerId: string;
     playerName: string;
     remainingCount: number;
+    newHostId?: string;  // Present if host left
   };
 }
 ```
 
-4. **`game_started`** - Game has begun
+5. **`host_transferred`** - Host privileges transferred
+```typescript
+{
+  type: 'host_transferred';
+  data: {
+    newHostId: string;
+    newHostName: string;
+  };
+}
+```
+
+6. **`left_room`** - Confirmation sent to leaving player
+```typescript
+{
+  type: 'left_room';
+  data: {
+    roomCode: string;
+    playerId: string;
+  };
+}
+```
+
+7. **`room_deleted`** - Room was deleted (last player left)
+```typescript
+{
+  type: 'room_deleted';
+  data: {
+    roomCode: string;
+    reason: string;
+  };
+}
+```
+
+8. **`all_players_ready`** - All players are ready to start
+```typescript
+{
+  type: 'all_players_ready';
+  data: {
+    roomCode: string;
+  };
+}
+```
+
+9. **`game_started`** - Game has begun
 ```typescript
 {
   type: 'game_started';
@@ -463,15 +652,34 @@ All WebSocket messages follow a standard format:
 }
 ```
 
-5. **`start_round`** - Round start with role-specific payloads
+10. **`start_round`** - Round start with role-specific payloads
 ```typescript
+// For Guesser
 {
   type: 'start_round';
   data: {
     question: string;
-    secretWord?: string;        // Only for Big Fish
-    canGenerateLie?: boolean;   // Only for Red Herrings
-    role: 'guesser' | 'bigFish' | 'redHerring';
+    role: 'guesser';
+  };
+}
+
+// For Big Fish
+{
+  type: 'start_round';
+  data: {
+    question: string;
+    secretWord: string;
+    role: 'bigFish';
+  };
+}
+
+// For Red Herring
+{
+  type: 'start_round';
+  data: {
+    question: string;
+    canGenerateLie: boolean;
+    role: 'redHerring';
   };
 }
 ```
@@ -479,50 +687,7 @@ All WebSocket messages follow a standard format:
 - **Big Fish:** Receives `question`, `secretWord`, and `role`
 - **Red Herrings:** Receives `question`, `canGenerateLie: true`, and `role`
 
-6. **`all_players_ready`** - All players are ready to start
-```typescript
-{
-  type: 'all_players_ready';
-  data: {
-    roomCode: string;
-  };
-}
-```
-
-7. **`reveal_result`** - Elimination result broadcast
-```typescript
-{
-  type: 'reveal_result';
-  data: {
-    eliminatedPlayerId: string;
-    wasBigFish: boolean;
-  };
-}
-```
-
-8. **`round_ended`** - Round concluded with score updates
-```typescript
-{
-  type: 'round_ended';
-  data: {
-    roundNumber: number;
-    scores: Array<{ playerId: string; score: number }>;
-  };
-}
-```
-
-9. **`game_over`** - Final leaderboard and game results
-```typescript
-{
-  type: 'game_over';
-  data: {
-    winner: { playerId: string; name: string; score: number };
-    leaderboard: Array<{ playerId: string; name: string; score: number }>;
-  };
-}
-```
-
-10. **`error`** - Error message
+11. **`error`** - Error message
 ```typescript
 {
   type: 'error';
@@ -589,6 +754,235 @@ Stores active and completed game rooms.
   totalGamesPlayed: number,
   totalWins: number,
   createdAt: Date
+}
+```
+
+## 🔑 Key Implementation Patterns
+
+### Query Parameter Authentication (WebSocket)
+Following the Outsider project pattern, WebSocket connections use query parameters for authentication:
+
+```typescript
+// Connection URL
+ws://localhost:3001/ws?roomCode=FISH42&playerId=player-123
+
+// In ws-controller.ts
+export const wsController = new Elysia()
+  .ws('/ws', {
+    query: t.Object({
+      roomCode: t.String(),
+      playerId: t.Optional(t.String()),
+    }),
+    open(ws) {
+      const { roomCode, playerId } = ws.data.query;
+      logger.info(`WS connected: room=${roomCode}, player=${playerId}`);
+      ws.subscribe(roomCode.toUpperCase());
+    },
+  });
+```
+
+**Benefits:**
+- Simple connection setup
+- No handshake overhead
+- Easy to debug and test
+- Consistent with ElysiaJS patterns
+
+### Host Transfer Logic
+When the host leaves, host privileges are automatically transferred:
+
+```typescript
+// In room-service.ts
+async leaveRoom(roomCode: string, playerId: string): Promise<LeaveRoomResult> {
+  const room = await GameRoom.findOne({ roomCode });
+  
+  if (playerId === room.hostId) {
+    // Host is leaving - transfer to first remaining player
+    const remainingPlayers = room.players.filter(p => p.playerId !== playerId);
+    
+    if (remainingPlayers.length === 0) {
+      // Last player - delete room
+      await GameRoom.deleteOne({ roomCode });
+      return { roomDeleted: true };
+    }
+    
+    // Transfer host to first remaining player
+    room.hostId = remainingPlayers[0].playerId;
+    room.players = remainingPlayers;
+    await room.save();
+    
+    return { newHostId: remainingPlayers[0].playerId };
+  }
+  
+  // Non-host leaving - just remove player
+  room.players = room.players.filter(p => p.playerId !== playerId);
+  await room.save();
+  
+  return {};
+}
+```
+
+**Events Triggered:**
+1. `host_transferred` - Broadcast to remaining players if host left
+2. `player_left` - Broadcast leaving player info
+3. `room_updated` - Broadcast updated room state
+4. `room_deleted` - Sent to leaving player if room was deleted
+
+### Room Auto-Deletion
+Rooms are automatically deleted when:
+- The last player (host) leaves
+- All players disconnect
+
+```typescript
+// In handleLeaveRoom (ws-controller.ts)
+if (result.roomDeleted) {
+  ws.send({
+    type: 'room_deleted',
+    data: {
+      roomCode: normalizedRoomCode,
+      reason: isHostLeaving ? 'Host left and room was empty' : 'Last player left'
+    }
+  });
+  
+  ws.unsubscribe(normalizedRoomCode);
+  // Clean up connection tracking
+  return;
+}
+```
+
+### Leave Room Pattern (Broadcast Before Unsubscribe)
+Critical pattern to ensure events reach all players:
+
+```typescript
+// ✅ CORRECT: Broadcast BEFORE unsubscribing
+async function handleLeaveRoom(ws: any, data: LeaveRoomData) {
+  // 1. Remove player from database
+  const result = await roomService.leaveRoom(roomCode, playerId);
+  
+  // 2. Broadcast to remaining players (while still subscribed)
+  ws.publish(roomCode, { type: 'player_left', data: {...} });
+  ws.publish(roomCode, { type: 'room_updated', data: {...} });
+  
+  // 3. Send confirmation to leaving player
+  ws.send({ type: 'left_room', data: {...} });
+  
+  // 4. NOW unsubscribe (after all broadcasts)
+  ws.unsubscribe(roomCode);
+}
+
+// ❌ WRONG: Unsubscribe before broadcasting
+async function handleLeaveRoom(ws: any, data: LeaveRoomData) {
+  await roomService.leaveRoom(roomCode, playerId);
+  ws.unsubscribe(roomCode);  // ❌ Can't broadcast after unsubscribe!
+  ws.publish(roomCode, {...});  // Never reaches anyone
+}
+```
+
+### Exponential Backoff Reconnection (Frontend)
+Recommended pattern for handling disconnections:
+
+```typescript
+// Frontend implementation example
+class WebSocketManager {
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 5;
+  
+  connect() {
+    this.ws = new WebSocket(this.url);
+    
+    this.ws.onclose = () => {
+      if (this.reconnectAttempts < this.maxReconnectAttempts) {
+        const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000);
+        setTimeout(() => {
+          this.reconnectAttempts++;
+          this.connect();
+        }, delay);
+      }
+    };
+    
+    this.ws.onopen = () => {
+      this.reconnectAttempts = 0;
+    };
+  }
+}
+```
+
+### MongoDB-Only State Management
+All game state is persisted in MongoDB - no in-memory storage:
+
+```typescript
+// ✅ CORRECT: Always query MongoDB
+const room = await GameRoom.findOne({ roomCode });
+room.players.push(newPlayer);
+await room.save();
+
+// ❌ WRONG: Don't use in-memory maps for game state
+const rooms = new Map();  // Don't do this!
+rooms.set(roomCode, room);
+```
+
+**Benefits:**
+- Single source of truth
+- Survives server restarts
+- Easy to debug and inspect
+- Consistent state across requests
+- No synchronization issues
+
+### Room Code Normalization
+All room codes are normalized to uppercase:
+
+```typescript
+const normalizedRoomCode = roomCode.toUpperCase();
+const room = await GameRoom.findOne({ roomCode: normalizedRoomCode });
+```
+
+**Schema Configuration:**
+```typescript
+const GameRoomSchema = new Schema({
+  roomCode: { 
+    type: String, 
+    required: true, 
+    unique: true, 
+    uppercase: true  // Auto-convert to uppercase
+  },
+});
+```
+
+### Connection Tracking
+Track WebSocket connections by room for targeted messaging:
+
+```typescript
+const roomConnections = new Map<string, Set<any>>();
+
+// In open handler
+if (!roomConnections.has(roomCode)) {
+  roomConnections.set(roomCode, new Set());
+}
+roomConnections.get(roomCode)!.add(ws);
+
+// In close handler
+const connections = roomConnections.get(roomCode);
+if (connections) {
+  connections.delete(ws);
+}
+```
+
+### Role-Specific Payloads
+Send different data based on player role:
+
+```typescript
+// In handleStartGame
+for (const connection of connections) {
+  const player = room.players.find(p => p.playerId === connection.data?.playerId);
+  
+  connection.send({
+    type: 'start_round',
+    data: {
+      question: room.question,
+      secretWord: player.role === 'bigFish' ? room.secretWord : undefined,
+      canGenerateLie: player.role === 'redHerring',
+      role: player.role
+    }
+  });
 }
 ```
 

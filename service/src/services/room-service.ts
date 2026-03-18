@@ -1,6 +1,14 @@
 import GameRoom, { IPlayer, IGameRoom } from '../models/game-room';
 import { NotFoundError, BadRequestError } from '../lib/errors';
 
+/**
+ * Result of a player leaving a room
+ */
+export interface LeaveRoomResult {
+  roomDeleted: boolean;
+  newHostId?: string | null;
+}
+
 export class RoomService {
   /**
    * Generate a unique 6-character room code
@@ -68,25 +76,65 @@ export class RoomService {
 
   /**
    * Remove player from room
+   * @returns Object with roomDeleted flag and newHostId if applicable
+   * 
+   * Host Transfer Logic:
+   * - If leaving player is host:
+   *   - If 1+ players remain: Transfer host to first non-host player
+   *   - If no players remain: Delete room
+   * - If leaving player is not host:
+   *   - Just remove player
    */
-  async leaveRoom(roomCode: string, playerId: string): Promise<void> {
+  async leaveRoom(roomCode: string, playerId: string): Promise<LeaveRoomResult> {
     const room = await GameRoom.findOne({ roomCode: roomCode.toUpperCase() });
-    if (!room) return;
+    if (!room) {
+      return { roomDeleted: false, newHostId: null };
+    }
 
-    // If host leaves, transfer host or delete room
-    if (playerId === room.hostId) {
-      if (room.players.length > 1) {
-        // Transfer to first player
-        room.hostId = room.players[1].playerId;
+    const isHostLeaving = playerId === room.hostId;
+    const remainingPlayers = room.players.filter(p => p.playerId !== playerId);
+
+    // Case 1: Host is leaving
+    if (isHostLeaving) {
+      // Check if there are remaining players
+      if (remainingPlayers.length > 0) {
+        // Transfer host to first non-host player (first player in array that's not leaving)
+        const newHost = remainingPlayers[0];
+        room.hostId = newHost.playerId;
+        room.players = remainingPlayers;
+        await room.save();
+        
+        return {
+          roomDeleted: false,
+          newHostId: newHost.playerId
+        };
       } else {
-        // Delete empty room
+        // No remaining players - delete the room
         await GameRoom.deleteOne({ _id: room._id });
-        return;
+        return {
+          roomDeleted: true,
+          newHostId: null
+        };
       }
     }
 
-    room.players = room.players.filter(p => p.playerId !== playerId);
+    // Case 2: Non-host is leaving
+    room.players = remainingPlayers;
     await room.save();
+
+    // Check if this was the last player (edge case - shouldn't happen with proper host transfer)
+    if (remainingPlayers.length === 0) {
+      await GameRoom.deleteOne({ _id: room._id });
+      return {
+        roomDeleted: true,
+        newHostId: null
+      };
+    }
+
+    return {
+      roomDeleted: false,
+      newHostId: null
+    };
   }
 
   /**
@@ -157,3 +205,6 @@ export class RoomService {
     return code;
   }
 }
+
+// Export singleton instance for use in controllers and tests
+export const roomService = new RoomService();

@@ -1,9 +1,7 @@
 import { Elysia, t } from 'elysia';
 import GameRoom, { IGameRoom, IPlayer } from '../models/game-room';
-import { RoomService } from '../services/room-service';
+import { roomService, type LeaveRoomResult } from '../services/room-service';
 import { logger } from '../lib/logger';
-
-const roomService = new RoomService();
 
 /**
  * WebSocket message types
@@ -107,9 +105,11 @@ async function handleJoinRoom(ws: any, data: JoinRoomData) {
   }
   roomConnections.get(normalizedRoomCode)!.add(ws);
 
-  // Broadcast player joined
+  // Get the player from the room
   const player = room.players.find(p => p.playerId === playerId);
+  
   if (player) {
+    // Broadcast player_joined to ALL players in the room (including the joining player)
     ws.publish(normalizedRoomCode, {
       type: 'player_joined',
       data: {
@@ -118,44 +118,124 @@ async function handleJoinRoom(ws: any, data: JoinRoomData) {
         playerCount: room.players.length
       }
     });
-  }
 
-  // Send current room state to the player
-  ws.send({ type: 'room_updated', data: room });
+    // Broadcast room_updated to ALL players in the room (critical for host's player list to update)
+    ws.publish(normalizedRoomCode, {
+      type: 'room_updated',
+      data: room
+    });
+  } else {
+    // Player not found in room - send error
+    ws.send({ type: 'error', data: { code: 'PLAYER_NOT_FOUND', message: 'Player not found in room' } });
+  }
 }
 
 /**
  * Handle leave_room event
+ * 
+ * Flow:
+ * 1. Get room BEFORE removing player (to know who's leaving)
+ * 2. Call roomService.leaveRoom()
+ * 3. Check result:
+ *    - If roomDeleted: Send 'room_deleted' to leaving player
+ *    - If newHostId: Broadcast 'host_transferred' to remaining players
+ * 4. Broadcast 'player_left' and 'room_updated' to remaining players
  */
 async function handleLeaveRoom(ws: any, data: LeaveRoomData) {
   const { roomCode, playerId } = data;
   const normalizedRoomCode = roomCode.toUpperCase();
 
-  // Unsubscribe from room channel
-  ws.unsubscribe(normalizedRoomCode);
+  // Step 1: Get room state BEFORE removing player
+  const roomBeforeLeave = await GameRoom.findOne({ roomCode: normalizedRoomCode });
 
-  // Remove from connections
+  if (!roomBeforeLeave) {
+    ws.send({ type: 'error', data: { code: 'ROOM_NOT_FOUND', message: 'Room not found' } });
+    return;
+  }
+
+  const leavingPlayer = roomBeforeLeave.players.find(p => p.playerId === playerId);
+  const isHostLeaving = playerId === roomBeforeLeave.hostId;
+
+  // Step 2: Remove player from database (handles host transfer and room deletion)
+  const result: LeaveRoomResult = await roomService.leaveRoom(normalizedRoomCode, playerId);
+
+  // Step 3: Handle based on result
+  if (result.roomDeleted) {
+    // Room was deleted - notify leaving player
+    ws.send({
+      type: 'room_deleted',
+      data: { 
+        roomCode: normalizedRoomCode, 
+        reason: isHostLeaving ? 'Host left and room was empty' : 'Last player left'
+      }
+    });
+    
+    // Unsubscribe and clean up
+    ws.unsubscribe(normalizedRoomCode);
+    const connections = roomConnections.get(normalizedRoomCode);
+    if (connections) {
+      connections.delete(ws);
+    }
+    return;
+  }
+
+  // Step 4: Broadcast to remaining players
+  const roomAfterLeave = await GameRoom.findOne({ roomCode: normalizedRoomCode });
+
+  if (!roomAfterLeave) {
+    // Edge case: room was deleted between operations
+    ws.send({ type: 'error', data: { code: 'ROOM_NOT_FOUND', message: 'Room not found after leave' } });
+    ws.unsubscribe(normalizedRoomCode);
+    const connections = roomConnections.get(normalizedRoomCode);
+    if (connections) {
+      connections.delete(ws);
+    }
+    return;
+  }
+
+  // If host transferred, broadcast host_transferred event
+  if (result.newHostId) {
+    const newHost = roomAfterLeave.players.find(p => p.playerId === result.newHostId);
+    ws.publish(normalizedRoomCode, {
+      type: 'host_transferred',
+      data: {
+        newHostId: result.newHostId,
+        newHostName: newHost?.name || 'Player'
+      }
+    });
+  }
+
+  // Broadcast player_left to all remaining players
+  ws.publish(normalizedRoomCode, {
+    type: 'player_left',
+    data: {
+      playerId,
+      playerName: leavingPlayer?.name || 'Player',
+      remainingCount: roomAfterLeave.players.length,
+      newHostId: result.newHostId || undefined
+    }
+  });
+
+  // Broadcast room_updated to all remaining players
+  ws.publish(normalizedRoomCode, {
+    type: 'room_updated',
+    data: roomAfterLeave
+  });
+
+  // Send confirmation to leaving player
+  ws.send({
+    type: 'left_room',
+    data: {
+      roomCode: normalizedRoomCode,
+      playerId
+    }
+  });
+
+  // Unsubscribe and clean up (after broadcasting)
+  ws.unsubscribe(normalizedRoomCode);
   const connections = roomConnections.get(normalizedRoomCode);
   if (connections) {
     connections.delete(ws);
-  }
-
-  // Remove player from database
-  await roomService.leaveRoom(normalizedRoomCode, playerId);
-
-  // Broadcast player left
-  const room = await GameRoom.findOne({ roomCode: normalizedRoomCode });
-  if (room) {
-    ws.publish(normalizedRoomCode, {
-      type: 'player_left',
-      data: {
-        playerId,
-        playerName: 'Player',
-        remainingCount: room.players.length
-      }
-    });
-
-    ws.publish(normalizedRoomCode, { type: 'room_updated', data: room });
   }
 }
 
@@ -239,46 +319,86 @@ export const wsController = new Elysia()
     
     open(ws) {
       const { roomCode, playerId } = ws.data.query;
-      
-      logger.info(`✅ WS connected: room=${roomCode}, player=${playerId || 'anonymous'}`);
-      
-      // Subscribe to room channel for pub/sub
-      ws.subscribe(`room:${roomCode}`);
-      
+      const normalizedRoomCode = roomCode.toUpperCase();
+
+      logger.info(`✅ WS connected: room=${normalizedRoomCode}, player=${playerId || 'anonymous'}`);
+
+      // Subscribe to room channel for pub/sub (use normalized room code without prefix)
+      ws.subscribe(normalizedRoomCode);
+
       // Send initial connection confirmation
       ws.send(JSON.stringify({
         type: 'connected',
-        data: { roomCode, playerId }
+        data: { roomCode: normalizedRoomCode, playerId }
       }));
     },
     close(ws) {
       const { roomCode, playerId } = ws.data.query;
-      
-      logger.info(`❌ WS disconnected: room=${roomCode}, player=${playerId || 'anonymous'}`);
-      
+      const normalizedRoomCode = roomCode.toUpperCase();
+
+      logger.info(`❌ WS disconnected: room=${normalizedRoomCode}, player=${playerId || 'anonymous'}`);
+
       // Handle disconnection - remove from room
-      if (playerId && roomCode) {
+      if (playerId && normalizedRoomCode) {
         // Remove from connections tracking
-        const connections = roomConnections.get(roomCode);
+        const connections = roomConnections.get(normalizedRoomCode);
         if (connections) {
           connections.delete(ws);
         }
 
-        // Update room in database (player offline)
-        roomService.leaveRoom(roomCode, playerId).catch((err) => {
-          logger.error(`Error removing player on disconnect: ${err instanceof Error ? err.message : 'Unknown error'}`);
-        });
+        // Get room state before removal
+        GameRoom.findOne({ roomCode: normalizedRoomCode })
+          .then(async (roomBeforeLeave) => {
+            if (!roomBeforeLeave) return;
 
-        // Broadcast to remaining players
-        const remainingCount = connections?.size || 0;
-        ws.publish(roomCode, JSON.stringify({
-          type: 'player_left',
-          data: {
-            playerId,
-            playerName: 'Player',
-            remainingCount
-          }
-        }));
+            const isHostLeaving = playerId === roomBeforeLeave.hostId;
+
+            // Update room in database (handles host transfer and room deletion)
+            const result = await roomService.leaveRoom(normalizedRoomCode, playerId);
+
+            // Handle room deletion case
+            if (result.roomDeleted) {
+              logger.info(`Room ${normalizedRoomCode} deleted due to host disconnection`);
+              return;
+            }
+
+            // Get updated room state
+            const roomAfterLeave = await GameRoom.findOne({ roomCode: normalizedRoomCode });
+
+            if (!roomAfterLeave) return;
+
+            // If host transferred, broadcast host_transferred
+            if (result.newHostId) {
+              const newHost = roomAfterLeave.players.find(p => p.playerId === result.newHostId);
+              ws.publish(normalizedRoomCode, JSON.stringify({
+                type: 'host_transferred',
+                data: {
+                  newHostId: result.newHostId,
+                  newHostName: newHost?.name || 'Player'
+                }
+              }));
+            }
+
+            // Broadcast player_left to remaining players
+            ws.publish(normalizedRoomCode, JSON.stringify({
+              type: 'player_left',
+              data: {
+                playerId,
+                playerName: roomBeforeLeave.players.find(p => p.playerId === playerId)?.name || 'Player',
+                remainingCount: roomAfterLeave.players.length,
+                newHostId: result.newHostId || undefined
+              }
+            }));
+
+            // Broadcast room_updated to remaining players
+            ws.publish(normalizedRoomCode, JSON.stringify({
+              type: 'room_updated',
+              data: roomAfterLeave
+            }));
+          })
+          .catch((err) => {
+            logger.error(`Error handling player disconnect: ${err instanceof Error ? err.message : 'Unknown error'}`);
+          });
       }
     },
     message(ws, message: WSMessage) {
