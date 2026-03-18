@@ -17,7 +17,7 @@
 
 ### GameRoom Model
 ```typescript
-// service/src/models/GameRoom.ts
+// service/src/models/game_room.ts
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IPlayer {
@@ -265,7 +265,7 @@ export default mongoose.model<IGameRoom>('GameRoom', GameRoomSchema);
 
 ### RoomService Class
 ```typescript
-// service/src/services/RoomService.ts
+// service/src/services/room-service.ts
 
 export class RoomService {
   /**
@@ -403,7 +403,7 @@ export class RoomService {
 
 ### WordBankService (Basic)
 ```typescript
-// service/src/services/WordBankService.ts
+// service/src/services/word-bank-service.ts
 
 export class WordBankService {
   private wordBank = [
@@ -574,10 +574,10 @@ service/
 │   │   ├── room-controller.ts
 │   │   └── socket-controller.ts
 │   ├── models/
-│   │   └── GameRoom.ts
+│   │   └── game-room.ts
 │   ├── services/
-│   │   ├── RoomService.ts
-│   │   └── WordBankService.ts
+│   │   ├── room-service.ts
+│   │   └── word-bank-service.ts
 │   ├── lib/
 │   │   ├── database.ts
 │   │   └── errors.ts

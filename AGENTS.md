@@ -13,6 +13,7 @@ A digital "Secret Screen" companion app for the "Sounds Fishy" board game. Desig
 - **Frontend:** Next.js (App Router), Tailwind CSS, Playwright (Testing), Vercel (Hosting)
 - **Backend:** Bun, ElysiaJS, Socket.io (Real-time), MongoDB (Persistence), Render (Hosting)
 - **State Management:** MongoDB (No Redis, No In-memory storage)
+- **AI Integration:** OpenAI-compatible LLM API (configurable API key, model, base URL)
 
 ---
 
@@ -39,13 +40,17 @@ A digital "Secret Screen" companion app for the "Sounds Fishy" board game. Desig
 1. **Host** creates a room (stored in MongoDB).
 2. **Players** join via Room Code. Names are stored in MongoDB.
 3. **Start:** Server randomly assigns 1 Guesser, 1 Big Fish, and the rest as Red Herrings.
+4. **AI Generation:** Server uses OpenAI-compatible LLM to generate:
+   - Question prompt for the round
+   - Correct answer (for Big Fish)
+   - Set of believable bluff answers (for Red Herrings to reference)
 
 ### Phase 2: The Briefing (Secret Info)
 1. Server emits `START_ROUND` via Socket.io with unique payloads.
 2. **Guesser Screen:** Displays the Question. They read it out loud.
 3. **Others Screen:** Displays "Tap to Reveal" button.
-    - **Big Fish** sees the truth.
-    - **Red Herrings** see the question + "Generate Lie" button (Gemini API).
+    - **Big Fish** sees the question + the correct answer (AI-generated).
+    - **Red Herrings** see the question + AI-generated bluff suggestions + optional "Generate More Lies" button (AI-powered).
 4. All players (except Guesser) click "Ready" when they have their answer prepared.
 
 ### Phase 3: The Pitch (Verbal)

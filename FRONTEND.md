@@ -8,9 +8,11 @@ This document outlines the frontend architecture, technologies, and key conventi
 *   **Language:** TypeScript
 *   **UI Library:** React
 *   **Styling:** TailwindCSS
+*   **HTTP Client:** Axios (for REST API requests)
 *   **Testing:** Playwright
 *   **Hosting:** Vercel
 *   **Package Manager/Runtime:** Bun (for development and build)
+*   **AI Integration:** OpenAI-compatible LLM API UI (configurable settings, generation status, error handling)
 
 ## ✍️ Naming Convention Guidelines (TypeScript Best Practices)
 Adhering to consistent naming conventions improves code readability and maintainability.
@@ -218,7 +220,8 @@ const GameRoomPage: React.FC = () => {
 *   **`/create`**: Room creation flow.
 *   **`/room/[roomCode]`**: Dynamic route for active game room.
 *   **`/room/[roomCode]/lobby`**: Lobby waiting area.
-*   **`/room/[roomCode]/briefing`**: Role briefing screen (secret info).
+*   **`/room/[roomCode]/briefing`**: Role briefing screen (secret info with AI-generated content).
+*   **`/room/[roomCode]/settings`**: Game settings (host-only AI configuration).
 *   **`/room/[roomCode]/elimination`**: Elimination phase UI.
 *   **`/room/[roomCode]/summary`**: Round summary and leaderboard.
 *   **`layout.tsx`**: Root layout for the application.
@@ -228,19 +231,28 @@ const GameRoomPage: React.FC = () => {
 *   **Atomic Design Principles**: Components organized into atoms, molecules, organisms.
 *   **Reusable UI Elements**:
     *   `Button`, `Input`, `Card` (atoms)
-    *   `PlayerCard`, `RoleBadge`, `ScoreDisplay` (molecules)
+    *   `PlayerCard`, `RoleBadge`, `ScoreDisplay`, `AIBadge` (molecules)
     *   `EliminationPanel`, `PlayerList`, `ReadyCheck` (organisms)
     *   `BriefingScreen`, `LobbyScreen` (templates)
+*   **AI-Specific Components**:
+    *   `AIBadge`: Shows "AI Generated" indicator with model name
+    *   `AILoadingSpinner`: Loading state for AI generation
+    *   `QuestionDisplay`: Question card with AI badge
+    *   `AnswerReveal`: Tap-to-reveal for Big Fish answer
+    *   `BluffSuggestions`: List of AI-suggested bluffs for Red Herrings
+    *   `AIConfigInput`: Host settings for API key, model, base URL
 
 ### `app/src/hooks/`
 *   **Custom React Hooks**: For encapsulating reusable stateful logic.
 *   **`useGameSocket`**: Socket.io connection and event handling.
 *   **`useGameState`**: Local game state management.
 *   **`usePlayerRole`**: Role-specific view logic.
+*   **`useAIGeneration`**: AI content generation (rounds, lies)
+*   **`useAIConfig`**: AI configuration management (host-only)
 
 ### `app/src/lib/`
 *   **Utility Functions**: Helper functions, formatters, validators.
-*   **API Client Setup**: Configuration for REST API calls.
+*   **API Client Setup**: Axios configuration with interceptors, base URL, and error handling.
 *   **Socket Client**: Socket.io client initialization.
 
 ### `app/src/services/`
@@ -258,12 +270,79 @@ const GameRoomPage: React.FC = () => {
 *   **No Global State Library:** Keep it simple with React Context only if truly needed.
 
 ## 🌐 API Integration
-*   **REST API:** For initial room creation, joining, and non-real-time operations.
+*   **Axios Client:** For all REST API requests with interceptors and error handling
 *   **Socket.io:** For all real-time game updates:
     *   Room state changes
     *   Round start/end
     *   Elimination results
     *   Score updates
+
+### Axios Configuration
+```typescript
+// app/src/lib/axios.ts
+import axios from 'axios';
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+export const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 10000,
+});
+
+// Request interceptor - add auth tokens if needed
+apiClient.interceptors.request.use(
+  (config) => {
+    // Add authentication headers here if implemented
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Response interceptor - handle common errors
+apiClient.interceptors.response.use(
+  (response) => response.data,
+  (error) => {
+    if (error.response?.status === 404) {
+      // Handle not found errors
+    } else if (error.response?.status === 500) {
+      // Handle server errors
+    }
+    return Promise.reject(error);
+  }
+);
+
+export default apiClient;
+```
+
+### API Service Example
+```typescript
+// app/src/services/api.ts
+import apiClient from '@/lib/axios';
+import { IGameRoom } from '@/types';
+
+export const roomAPI = {
+  createRoom: (hostName: string) => 
+    apiClient.post('/api/rooms', { hostName }),
+
+  getRoom: (roomCode: string) => 
+    apiClient.get(`/api/rooms/${roomCode}`),
+
+  joinRoom: (roomCode: string, playerName: string) => 
+    apiClient.post(`/api/rooms/${roomCode}/join`, { playerName }),
+
+  leaveRoom: (roomCode: string, playerId: string) => 
+    apiClient.post(`/api/rooms/${roomCode}/leave`, { playerId }),
+
+  generateRound: (roomCode: string, data?: GenerateRoundData) => 
+    apiClient.post(`/api/rooms/${roomCode}/generate-round`, data),
+
+  generateLie: (roomCode: string, data: GenerateLieData) => 
+    apiClient.post(`/api/rooms/${roomCode}/generate-lie`, data),
+};
+```
 
 ### Socket Message Formats
 ```typescript
@@ -339,5 +418,16 @@ interface RevealResultMessage {
 ### Red Herring View
 *   "Tap to Reveal" interaction
 *   Question display
-*   "Generate Lie" button (Gemini AI integration)
+*   AI-generated bluff suggestions list
+*   "Generate More Lies" button (AI-powered)
 *   Ready button
+
+### Host Settings View
+*   AI Configuration section (collapsible)
+  *   API Key input (password field)
+  *   Model selector (OpenAI, OpenRouter, Together, etc.)
+  *   Base URL input (for custom endpoints)
+  *   Test Connection button
+*   Category preference (optional)
+*   Difficulty selector (easy/medium/hard)
+*   Regenerate question button

@@ -9,6 +9,7 @@ This document details the backend architecture, services, and data models for th
 *   **Database:** MongoDB (via Mongoose ODM) - **Single source of truth for all data**
 *   **Language:** TypeScript
 *   **Real-time Communication:** Socket.io
+*   **AI Integration:** OpenAI-compatible LLM API (configurable API key, model, base URL)
 
 ## ✍️ Naming Convention Guidelines (TypeScript Best Practices)
 Adhering to consistent naming conventions improves code readability and maintainability.
@@ -21,7 +22,9 @@ Adhering to consistent naming conventions improves code readability and maintain
     *   Examples: `GameStatus.InProgress`, `PlayerRole.Guesser`, `PlayerRole.BigFish`, `PlayerRole.RedHerring`
 *   **Constants (Global/Module-Level)**: Use `UPPER_SNAKE_CASE`.
     *   Examples: `DEFAULT_PORT`, `MAX_PLAYERS_PER_ROOM`, `DB_CONNECTION_STRING`, `POINTS_FOR_ELIMINATION`
-*   **Filenames**: Use `kebab-case` for most files (e.g., `game-controller.ts`, `room-service.ts`). For files exclusively exporting a single `PascalCase` class or interface, `PascalCase` filename is also acceptable (e.g., `GameRoom.ts`) but `kebab-case` is generally preferred for consistency.
+*   **Filenames**: Use `kebab-case` for all files (e.g., `game-controller.ts`, `room-service.ts`, `ai-service.ts`). This applies to all files including models, services, controllers, and utilities.
+    *   ✅ Correct: `room-service.ts`, `game-room.ts`, `ai-controller.ts`
+    *   ❌ Incorrect: `roomService.ts`, `GameRoom.ts`, `aiController.ts`
 *   **Private/Protected Members**: Prefix with an underscore `_`.
     *   Examples: `_privateField`, `_calculateRoundScores`
 
@@ -214,7 +217,8 @@ function joinRoom(roomCode: string, playerId: string) {
 #### **Client to Server:**
 *   `join_room`: Player joins a room with their name.
 *   `ready_up`: Player indicates they are ready (after seeing their role/word).
-*   `generate_lie`: Red Herring requests AI-generated lie from Gemini API.
+*   `generate_lie`: Red Herring requests AI-generated lie from LLM API.
+*   `generate_round`: Host requests AI generation for new round question/answers.
 *   `eliminate_player`: Guesser selects a player to eliminate.
 *   `bank_points`: Guesser decides to bank their accumulated points.
 *   `continue_round`: Guesser chooses to continue after eliminating a Red Herring.
@@ -224,11 +228,14 @@ function joinRoom(roomCode: string, playerId: string) {
 *   `game_started`: Notifies all players that the game has begun.
 *   `start_round`: Emits at round start with role-specific payloads:
     *   **Guesser:** Question only.
-    *   **Big Fish:** Question + correct answer.
-    *   **Red Herrings:** Question + lie generation option.
+    *   **Big Fish:** Question + correct answer (AI-generated).
+    *   **Red Herrings:** Question + AI-generated bluff suggestions.
+*   `round_generated`: Notifies that AI has generated new question/answers.
+*   `lie_generated`: Returns AI-generated lie suggestion to Red Herring.
 *   `reveal_result`: Broadcasts elimination result (Red Herring or Big Fish).
 *   `round_ended`: Notifies round conclusion with score updates.
 *   `game_over`: Final leaderboard and game results.
+*   `generation_error`: AI generation failed (with fallback info).
 
 ## 🗄 Database Schema (MongoDB)
 
@@ -250,8 +257,13 @@ Stores active and completed game rooms.
     eliminatedInRound: number // Optional, tracks when player was eliminated
   }],
   currentRound: number,
-  secretWord: string,         // The correct answer for current round
-  question: string,           // The question prompt
+  aiConfig: {                 // AI-generated content for current round
+    question: string,
+    correctAnswer: string,
+    bluffSuggestions: string[],
+    generatedAt: Date,
+    model: string             // e.g., "gpt-3.5-turbo", "llama-3-70b"
+  },
   eliminatedPlayers: [{
     playerId: string,
     round: number,
@@ -286,8 +298,47 @@ Stores active and completed game rooms.
 
 ## 🔒 Authentication & Authorization
 *   **Room-based Access:** Players authenticate via room code + player name.
-*   **Host Privileges:** Only the host can start the game, advance rounds.
+*   **Host Privileges:** Only the host can start the game, advance rounds, configure AI settings.
 *   **Role-based Actions:** Guesser eliminates, others generate lies and ready up.
+
+## 🤖 AI Configuration
+
+### Environment Variables
+```bash
+# AI Configuration (OpenAI-compatible)
+AI_API_KEY=sk-your-api-key-here
+AI_MODEL=gpt-3.5-turbo
+AI_BASE_URL=https://api.openai.com/v1
+
+# Alternative: OpenRouter (multiple models)
+# AI_API_KEY=your-openrouter-key
+# AI_MODEL=meta-llama/llama-3-70b-instruct
+# AI_BASE_URL=https://openrouter.ai/api/v1
+
+# Alternative: Together AI
+# AI_API_KEY=your-together-key
+# AI_MODEL=meta-llama/Llama-3-70b-chat-hf
+# AI_BASE_URL=https://api.together.xyz/v1
+
+# Alternative: Local Ollama
+# AI_API_KEY=ollama
+# AI_MODEL=llama3
+# AI_BASE_URL=http://localhost:11434/v1
+```
+
+### AI Service Features
+*   **Configurable API:** Support for OpenAI, OpenRouter, Together AI, Ollama, and any OpenAI-compatible API
+*   **Question Generation:** AI generates question + correct answer + bluff suggestions
+*   **Lie Generation:** On-demand lie suggestions for Red Herring players
+*   **Fallback Word Bank:** Pre-defined questions/answers if AI is unavailable
+*   **Token Tracking:** Monitor API usage and costs (optional)
+
+### AI Generation Flow
+1.  Host starts game → Server calls AI service
+2.  AI generates: question, correct answer, 3-5 bluff suggestions
+3.  Content saved to MongoDB in `GameRoom.aiConfig`
+4.  Server emits `start_round` with role-specific payloads
+5.  Red Herrings can request additional lie suggestions via `generate_lie`
 
 ## 🎮 Core Game Logic
 
