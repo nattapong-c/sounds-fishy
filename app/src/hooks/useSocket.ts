@@ -1,81 +1,120 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
-const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001';
+const WS_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'ws://localhost:3001/ws';
 
-export const useSocket = (roomCode?: string) => {
-  const [socket, setSocket] = useState<Socket | null>(null);
+export interface WebSocketMessage {
+  type: string;
+  data: any;
+}
+
+export interface UseWebSocketReturn {
+  isConnected: boolean;
+  isReconnecting: boolean;
+  sendMessage: (type: string, data: any) => void;
+  subscribe: (eventType: string, callback: (data: any) => void) => void;
+  unsubscribe: (eventType: string) => void;
+}
+
+export const useWebSocket = (): UseWebSocketReturn => {
+  const wsRef = useRef<WebSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const callbacksRef = useRef<Map<string, Set<(data: any) => void>>>(new Map());
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
+  const reconnectAttemptsRef = useRef(0);
 
-  useEffect(() => {
-    const newSocket = io(SOCKET_URL, {
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-    });
+  const connect = useCallback(() => {
+    try {
+      const ws = new WebSocket(WS_URL);
 
-    newSocket.on('connect', () => {
-      setIsConnected(true);
-      setIsReconnecting(false);
-      console.log('✅ Socket connected');
-    });
+      ws.onopen = () => {
+        console.log('✅ WebSocket connected');
+        setIsConnected(true);
+        setIsReconnecting(false);
+        reconnectAttemptsRef.current = 0;
+      };
 
-    newSocket.on('disconnect', () => {
-      setIsConnected(false);
-      console.log('❌ Socket disconnected');
-    });
+      ws.onclose = () => {
+        console.log('❌ WebSocket disconnected');
+        setIsConnected(false);
+        
+        // Attempt reconnection
+        if (reconnectAttemptsRef.current < 5) {
+          setIsReconnecting(true);
+          reconnectTimeoutRef.current = setTimeout(() => {
+            reconnectAttemptsRef.current += 1;
+            console.log(`🔄 Reconnecting... (attempt ${reconnectAttemptsRef.current})`);
+            connect();
+          }, 1000 * reconnectAttemptsRef.current);
+        }
+      };
 
-    newSocket.on('connect_error', () => {
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const message: WebSocketMessage = JSON.parse(event.data);
+          const callbacks = callbacksRef.current.get(message.type);
+          if (callbacks) {
+            callbacks.forEach((callback) => callback(message.data));
+          }
+        } catch (error) {
+          console.error('Failed to parse message:', error);
+        }
+      };
+
+      wsRef.current = ws;
+    } catch (error) {
+      console.error('Failed to create WebSocket:', error);
       setIsReconnecting(true);
-      console.log('🔄 Socket reconnecting...');
-    });
-
-    setSocket(newSocket);
-
-    return () => {
-      newSocket.close();
-    };
+    }
   }, []);
 
-  // Join room
-  const joinRoom = useCallback((playerId: string) => {
-    if (socket && roomCode) {
-      socket.emit('join_room', { roomCode, playerId });
-    }
-  }, [socket, roomCode]);
+  useEffect(() => {
+    connect();
 
-  // Leave room
-  const leaveRoom = useCallback(() => {
-    if (socket && roomCode) {
-      socket.emit('leave_room', { roomCode });
-    }
-  }, [socket, roomCode]);
+    return () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, [connect]);
 
-  // Ready up
-  const toggleReady = useCallback((playerId: string) => {
-    if (socket && roomCode) {
-      socket.emit('ready_up', { roomCode, playerId });
+  const sendMessage = useCallback((type: string, data: any) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type, data }));
+    } else {
+      console.warn('WebSocket not connected, message queued:', type);
     }
-  }, [socket, roomCode]);
+  }, []);
 
-  // Start game (host only)
-  const startGame = useCallback(() => {
-    if (socket && roomCode) {
-      socket.emit('start_game', { roomCode });
+  const subscribe = useCallback((eventType: string, callback: (data: any) => void) => {
+    if (!callbacksRef.current.has(eventType)) {
+      callbacksRef.current.set(eventType, new Set());
     }
-  }, [socket, roomCode]);
+    callbacksRef.current.get(eventType)!.add(callback);
+  }, []);
+
+  const unsubscribe = useCallback((eventType: string) => {
+    const callbacks = callbacksRef.current.get(eventType);
+    if (callbacks) {
+      callbacks.clear();
+      callbacksRef.current.delete(eventType);
+    }
+  }, []);
 
   return {
-    socket,
     isConnected,
     isReconnecting,
-    joinRoom,
-    leaveRoom,
-    toggleReady,
-    startGame,
+    sendMessage,
+    subscribe,
+    unsubscribe,
   };
 };

@@ -1,44 +1,14 @@
+// Centralized type definitions
+// Re-exports from models folder to maintain single source of truth
+
+// Re-export all model interfaces
+export { IPlayer, IGameRoom } from '../models/game-room';
+
+// Type aliases for convenience
 export type PlayerRole = 'guesser' | 'bigFish' | 'redHerring' | 'host';
 export type GameStatus = 'lobby' | 'briefing' | 'pitch' | 'elimination' | 'round_summary' | 'completed';
 
-export interface IPlayer {
-  playerId: string;
-  name: string;
-  role: PlayerRole;
-  score: number;
-  isReady: boolean;
-  generatedLie?: string;
-  eliminatedInRound?: number;
-}
-
-export interface IGameRoom {
-  _id?: string;
-  roomCode: string;
-  hostId: string;
-  status: GameStatus;
-  players: IPlayer[];
-  currentRound: number;
-  secretWord?: string;
-  question?: string;
-  eliminatedPlayers?: Array<{
-    playerId: string;
-    round: number;
-    wasBigFish: boolean;
-  }>;
-  roundHistory?: Array<{
-    roundNumber: number;
-    secretWord: string;
-    question: string;
-    guesserScore: number;
-    bigFishScore: number;
-    redHerringScores: number[];
-    bustOccurred: boolean;
-  }>;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-// Socket events
+// Socket events types
 export interface SocketEvents {
   // Client → Server
   'join_room': { roomCode: string; playerId: string };

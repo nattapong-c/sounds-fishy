@@ -2,10 +2,11 @@ import { Elysia, t } from 'elysia';
 import { RoomService } from '../services/room-service';
 import GameRoom from '../models/game-room';
 import { CustomAppError } from '../lib/errors';
+import { logger } from '../lib/logger';
 
 const roomService = new RoomService();
 
-export const roomController = new Elysia('/api')
+export const roomController = new Elysia({ prefix: '/api' })
   // POST /api/rooms - Create a new room
   .post('/rooms',
     async ({ body, set }) => {

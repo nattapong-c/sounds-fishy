@@ -8,7 +8,7 @@ This document details the backend architecture, services, and data models for th
 *   **Runtime:** Bun
 *   **Database:** MongoDB (via Mongoose ODM) - **Single source of truth for all data**
 *   **Language:** TypeScript
-*   **Real-time Communication:** Socket.io
+*   **Real-time Communication:** ElysiaJS Built-in WebSocket (Elysia.ws())
 *   **AI Integration:** OpenAI-compatible LLM API (configurable API key, model, base URL)
 
 ## ✍️ Naming Convention Guidelines (TypeScript Best Practices)
@@ -145,7 +145,7 @@ function joinRoom(roomCode: string, playerId: string) {
 *   **Test Runner:** `Bun.test` (Bun's built-in test runner)
 *   **Assertion Library:** `expect` (bundled with `Bun.test`)
 *   **HTTP Testing:** `Supertest` for testing ElysiaJS HTTP endpoints
-*   **Mocks:** Built-in mocking capabilities of `Bun.test`
+*   **WebSocket Testing:** Native WebSocket API in Bun tests
 
 ### Types of Tests
 
@@ -164,8 +164,45 @@ function joinRoom(roomCode: string, playerId: string) {
 #### 🚀 End-to-End (E2E) Tests
 *   **Focus:** Test entire system flow from start to finish.
 *   **Scope:** Validate critical user journeys (create room → join → play → score).
-*   **Tools:** Use `Supertest` for HTTP requests, custom WebSocket client for Socket.io.
+*   **Tools:** Use `Supertest` for HTTP requests, native WebSocket client for WS events.
 *   **Location:** Place E2E tests in `__tests__/e2e` directory.
+
+### WebSocket Testing Example
+```typescript
+// service/src/__tests__/integration/websocket.test.ts
+import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+
+describe('WebSocket Events', () => {
+  let ws: WebSocket;
+  
+  beforeAll(async () => {
+    ws = new WebSocket('ws://localhost:3001/ws');
+    
+    await new Promise((resolve) => {
+      ws.onopen = resolve;
+    });
+  });
+
+  test('join_room should add player to room', (done) => {
+    ws.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      if (message.type === 'room_updated') {
+        expect(message.data.roomCode).toBe('TEST123');
+        done();
+      }
+    };
+    
+    ws.send(JSON.stringify({
+      type: 'join_room',
+      data: { roomCode: 'TEST123', playerId: 'player-1' }
+    }));
+  });
+
+  afterAll(() => {
+    ws.close();
+  });
+});
+```
 
 ### Best Practices
 *   **Clear Test Descriptions:** Use descriptive `describe` and `it`/`test` blocks.
@@ -178,31 +215,104 @@ function joinRoom(roomCode: string, playerId: string) {
 
 ## 📂 Project Structure
 
-### `service/src/controllers/`
-*   **Route Handlers**: Define HTTP endpoints (REST).
-*   **WebSocket Handlers**: Manage Socket.io connections and message processing.
-*   Separation of concerns between request handling and business logic.
-
 ### `service/src/models/`
-*   **Mongoose Schemas**: Define structure and validation for MongoDB documents.
-*   **GameRoom Model**: Stores room code, players, roles, scores, current phase.
-*   **Player Model**: (If separate user authentication is implemented).
+**Single Source of Truth for TypeScript Interfaces and Mongoose Models**
+- **Mongoose Schemas**: Define structure and validation for MongoDB documents.
+- **TypeScript Interfaces**: All interfaces are defined here alongside schemas.
+- **Centralized Exports**: `models/index.ts` re-exports all interfaces for easy importing.
+- **GameRoom Model**: Stores room code, players, roles, scores, current phase.
+
+**Example:**
+```typescript
+// service/src/models/game-room.ts
+export interface IPlayer {
+  playerId: string;
+  name: string;
+  role: 'guesser' | 'bigFish' | 'redHerring' | 'host';
+  score: number;
+  isReady: boolean;
+  generatedLie?: string;
+  eliminatedInRound?: number;
+}
+
+export interface IGameRoom extends Document {
+  roomCode: string;
+  hostId: string;
+  status: GameStatus;
+  players: IPlayer[];
+  // ...
+}
+
+const PlayerSchema = new Schema<IPlayer>({...});
+const GameRoomSchema = new Schema<IGameRoom>({...});
+
+export default mongoose.model<IGameRoom>('GameRoom', GameRoomSchema);
+```
+
+**Import Pattern:**
+```typescript
+// Import from models directly
+import GameRoom, { IPlayer, IGameRoom } from '../models/game-room';
+
+// Or use centralized exports
+import { IPlayer, IGameRoom } from '../models';
+```
+
+### `service/src/types/`
+**Re-exported Type Aliases and API Contracts**
+- Re-exports model interfaces for convenience.
+- Defines type aliases (`PlayerRole`, `GameStatus`).
+- Socket event type definitions.
+- API request/response types.
+
+**Example:**
+```typescript
+// service/src/types/index.ts
+export { IPlayer, IGameRoom } from '../models/game-room';
+
+export type PlayerRole = 'guesser' | 'bigFish' | 'redHerring' | 'host';
+export type GameStatus = 'lobby' | 'briefing' | 'pitch' | 'elimination' | 'round_summary' | 'completed';
+```
+
+### `service/src/controllers/`
+**Route and WebSocket Handlers**
+- **Route Handlers**: Define HTTP endpoints (REST).
+- **WebSocket Handlers**: Manage ElysiaJS WebSocket connections and message processing.
+- Import types from `models/` folder.
+- Keep only route logic - no business logic.
+
+**Files:**
+- `room-controller.ts`: REST API endpoints for room management
+- `ws-controller.ts`: WebSocket event handlers for real-time communication
 
 ### `service/src/services/`
-*   **Core Game Logic**: Encapsulates the rules and state transitions of *Sounds Fishy*.
-    *   Role distribution (1 Guesser, 1 Big Fish, rest Red Herrings).
-    *   Secret word selection from word bank.
-    *   Scoring system (elimination points, banking, bust logic).
-    *   Round rotation and phase management.
-*   **Utility Services**: Helper functions for word generation, room code creation.
+**Core Business Logic**
+- Encapsulates the rules and state transitions of *Sounds Fishy*.
+- Import types from `models/` folder.
+- Pure business logic - no HTTP/WebSocket concerns.
+
+**Responsibilities:**
+- Role distribution (1 Guesser, 1 Big Fish, rest Red Herrings).
+- Secret word selection from word bank.
+- Scoring system (elimination points, banking, bust logic).
+- Round rotation and phase management.
+
+**Files:**
+- `room-service.ts`: Room management and game logic
+- `word-bank-service.ts`: Word/answer generation utilities
 
 ### `service/src/lib/`
-*   **Database Connection**: Mongoose setup and connection pooling.
-*   **Middlewares**: Custom Elysia middlewares (authentication, logging, error handling).
-*   **Type Definitions**: Shared types for internal backend use.
+**Utilities and Infrastructure**
+- **Database Connection**: Mongoose setup and connection pooling.
+- **Middlewares**: Custom Elysia middlewares (authentication, logging, error handling).
+- **Error Classes**: Custom error types for consistent error handling.
+- **Logger**: Structured logging utility.
 
 ### `service/src/index.ts`
-*   **Elysia Entry Point**: Initializes the Elysia server, registers routes, Socket.io handlers, and connects to MongoDB.
+**Elysia Entry Point**
+- Initializes the Elysia server.
+- Registers REST routes and WebSocket handlers.
+- Connects to MongoDB.
 
 ## 🚀 API Endpoints (REST & WebSockets)
 
@@ -214,28 +324,214 @@ function joinRoom(roomCode: string, playerId: string) {
 
 ### WebSocket Events
 
-#### **Client to Server:**
-*   `join_room`: Player joins a room with their name.
-*   `ready_up`: Player indicates they are ready (after seeing their role/word).
-*   `generate_lie`: Red Herring requests AI-generated lie from LLM API.
-*   `generate_round`: Host requests AI generation for new round question/answers.
-*   `eliminate_player`: Guesser selects a player to eliminate.
-*   `bank_points`: Guesser decides to bank their accumulated points.
-*   `continue_round`: Guesser chooses to continue after eliminating a Red Herring.
+**Connection Endpoint:** `ws://<host>:<port>/ws`
 
-#### **Server to Client:**
-*   `room_updated`: Broadcasts room state changes (player joined, left).
-*   `game_started`: Notifies all players that the game has begun.
-*   `start_round`: Emits at round start with role-specific payloads:
-    *   **Guesser:** Question only.
-    *   **Big Fish:** Question + correct answer (AI-generated).
-    *   **Red Herrings:** Question + AI-generated bluff suggestions.
-*   `round_generated`: Notifies that AI has generated new question/answers.
-*   `lie_generated`: Returns AI-generated lie suggestion to Red Herring.
-*   `reveal_result`: Broadcasts elimination result (Red Herring or Big Fish).
-*   `round_ended`: Notifies round conclusion with score updates.
-*   `game_over`: Final leaderboard and game results.
-*   `generation_error`: AI generation failed (with fallback info).
+**Message Format:**
+All WebSocket messages follow a standard format:
+```typescript
+{
+  type: string;      // Event name
+  data: any;         // Event payload
+}
+```
+
+#### **Client to Server Events:**
+
+1. **`join_room`** - Player joins a room
+```typescript
+{
+  type: 'join_room';
+  data: {
+    roomCode: string;
+    playerId: string;
+  };
+}
+```
+
+2. **`leave_room`** - Player leaves a room
+```typescript
+{
+  type: 'leave_room';
+  data: {
+    roomCode: string;
+    playerId: string;
+  };
+}
+```
+
+3. **`ready_up`** - Player toggles ready status
+```typescript
+{
+  type: 'ready_up';
+  data: {
+    roomCode: string;
+    playerId: string;
+  };
+}
+```
+
+4. **`start_game`** - Host starts the game
+```typescript
+{
+  type: 'start_game';
+  data: {
+    roomCode: string;
+    hostId: string;
+  };
+}
+```
+
+5. **`generate_lie`** - Red Herring requests AI-generated lie
+```typescript
+{
+  type: 'generate_lie';
+  data: {
+    roomCode: string;
+    playerId: string;
+  };
+}
+```
+
+6. **`eliminate_player`** - Guesser selects a player to eliminate
+```typescript
+{
+  type: 'eliminate_player';
+  data: {
+    roomCode: string;
+    targetPlayerId: string;
+  };
+}
+```
+
+7. **`bank_points`** - Guesser banks accumulated points
+```typescript
+{
+  type: 'bank_points';
+  data: {
+    roomCode: string;
+  };
+}
+```
+
+#### **Server to Client Events:**
+
+1. **`room_updated`** - Broadcasts room state changes
+```typescript
+{
+  type: 'room_updated';
+  data: {
+    roomCode: string;
+    players: IPlayer[];
+    status: string;
+    currentRound: number;
+  };
+}
+```
+
+2. **`player_joined`** - New player joined the room
+```typescript
+{
+  type: 'player_joined';
+  data: {
+    playerId: string;
+    playerName: string;
+    playerCount: number;
+  };
+}
+```
+
+3. **`player_left`** - Player left the room
+```typescript
+{
+  type: 'player_left';
+  data: {
+    playerId: string;
+    playerName: string;
+    remainingCount: number;
+  };
+}
+```
+
+4. **`game_started`** - Game has begun
+```typescript
+{
+  type: 'game_started';
+  data: {
+    roomCode: string;
+    status: 'briefing';
+  };
+}
+```
+
+5. **`start_round`** - Round start with role-specific payloads
+```typescript
+{
+  type: 'start_round';
+  data: {
+    question: string;
+    secretWord?: string;        // Only for Big Fish
+    canGenerateLie?: boolean;   // Only for Red Herrings
+    role: 'guesser' | 'bigFish' | 'redHerring';
+  };
+}
+```
+- **Guesser:** Receives `question` and `role`
+- **Big Fish:** Receives `question`, `secretWord`, and `role`
+- **Red Herrings:** Receives `question`, `canGenerateLie: true`, and `role`
+
+6. **`all_players_ready`** - All players are ready to start
+```typescript
+{
+  type: 'all_players_ready';
+  data: {
+    roomCode: string;
+  };
+}
+```
+
+7. **`reveal_result`** - Elimination result broadcast
+```typescript
+{
+  type: 'reveal_result';
+  data: {
+    eliminatedPlayerId: string;
+    wasBigFish: boolean;
+  };
+}
+```
+
+8. **`round_ended`** - Round concluded with score updates
+```typescript
+{
+  type: 'round_ended';
+  data: {
+    roundNumber: number;
+    scores: Array<{ playerId: string; score: number }>;
+  };
+}
+```
+
+9. **`game_over`** - Final leaderboard and game results
+```typescript
+{
+  type: 'game_over';
+  data: {
+    winner: { playerId: string; name: string; score: number };
+    leaderboard: Array<{ playerId: string; name: string; score: number }>;
+  };
+}
+```
+
+10. **`error`** - Error message
+```typescript
+{
+  type: 'error';
+  data: {
+    code: string;
+    message: string;
+  };
+}
+```
 
 ## 🗄 Database Schema (MongoDB)
 

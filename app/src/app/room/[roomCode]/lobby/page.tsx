@@ -5,7 +5,6 @@ import { useRouter, useParams } from 'next/navigation';
 import Button from '@/components/ui/Button';
 import PlayerList from '@/components/players/PlayerList';
 import { useRoom } from '@/hooks/useRoom';
-import { useSocket } from '@/hooks/useSocket';
 import { roomAPI } from '@/services/api';
 
 export default function LobbyPage() {
@@ -13,8 +12,7 @@ export default function LobbyPage() {
   const params = useParams();
   const roomCode = params.roomCode as string;
 
-  const { room, isLoading, error, isConnected } = useRoom(roomCode);
-  const { socket, joinRoom, leaveRoom, toggleReady, startGame } = useSocket(roomCode);
+  const { room, isLoading, error, isConnected, isReconnecting, joinRoom, leaveRoom, toggleReady, startGame } = useRoom(roomCode);
 
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
@@ -29,10 +27,10 @@ export default function LobbyPage() {
 
   // Join room on mount
   useEffect(() => {
-    if (socket && playerId && room) {
-      joinRoom(playerId);
+    if (playerId && room && isConnected) {
+      joinRoom();
     }
-  }, [socket, playerId, room, joinRoom]);
+  }, [playerId, room, isConnected, joinRoom]);
 
   // Check if game has started
   useEffect(() => {

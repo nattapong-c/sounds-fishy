@@ -2,7 +2,7 @@ import { Elysia } from 'elysia';
 import { cors } from '@elysiajs/cors';
 import { connectDB } from './lib/database';
 import { roomController } from './controllers/room-controller';
-import { setupSocketIO } from './controllers/socket-controller';
+import { wsController } from './controllers/ws-controller';
 import { logger } from './lib/logger';
 
 // Initialize Database connection
@@ -17,17 +17,15 @@ const app = new Elysia()
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     }),
   )
+  .use(wsController)
   .use(roomController)
   .get('/', () => '🐟 Sounds Fishy API is running!')
   .get('/health', () => ({ status: 'ok', timestamp: new Date().toISOString() }))
   .listen(process.env.PORT || 3001);
 
-// Setup Socket.IO on top of Elysia's server
-const io = setupSocketIO(app.server!);
-
 logger.info(
   `🐟 Sounds Fishy is running at ${app.server?.hostname}:${app.server?.port}`,
 );
+logger.info(`🔌 WebSocket endpoint: ws://${app.server?.hostname}:${app.server?.port}/ws`);
 
 export type AppRouter = typeof app;
-export { io };

@@ -1,15 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSocket } from './useSocket';
+import { useWebSocket } from './useSocket';
 import { roomAPI } from '@/services/api';
 import { IGameRoom } from '@/types';
 
-export const useRoom = (roomCode: string) => {
+export const useRoom = (roomCode: string, playerId?: string) => {
   const [room, setRoom] = useState<IGameRoom | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { socket, isConnected } = useSocket(roomCode);
+  const { isConnected, isReconnecting, sendMessage, subscribe } = useWebSocket();
 
   // Fetch initial room data
   useEffect(() => {
@@ -33,28 +33,62 @@ export const useRoom = (roomCode: string) => {
     }
   }, [roomCode]);
 
-  // Listen for socket updates
+  // Subscribe to WebSocket events
   useEffect(() => {
-    if (!socket) return;
+    if (!isConnected) return;
 
-    socket.on('room_updated', (data) => {
+    // Subscribe to room updates
+    const unsubscribeRoomUpdated = subscribe('room_updated', (data) => {
       setRoom(data);
     });
 
-    socket.on('player_joined', (data) => {
+    const unsubscribePlayerJoined = subscribe('player_joined', (data) => {
       console.log('Player joined:', data.playerName);
     });
 
-    socket.on('player_left', (data) => {
+    const unsubscribePlayerLeft = subscribe('player_left', (data) => {
       console.log('Player left:', data.playerName);
     });
 
     return () => {
-      socket.off('room_updated');
-      socket.off('player_joined');
-      socket.off('player_left');
+      unsubscribeRoomUpdated();
+      unsubscribePlayerJoined();
+      unsubscribePlayerLeft();
     };
-  }, [socket]);
+  }, [isConnected, subscribe]);
 
-  return { room, isLoading, error, isConnected };
+  // WebSocket actions
+  const joinRoom = () => {
+    if (playerId) {
+      sendMessage('join_room', { roomCode, playerId });
+    }
+  };
+
+  const leaveRoom = () => {
+    if (playerId) {
+      sendMessage('leave_room', { roomCode, playerId });
+    }
+  };
+
+  const toggleReady = () => {
+    if (playerId) {
+      sendMessage('ready_up', { roomCode, playerId });
+    }
+  };
+
+  const startGame = () => {
+    sendMessage('start_game', { roomCode });
+  };
+
+  return {
+    room,
+    isLoading,
+    error,
+    isConnected,
+    isReconnecting,
+    joinRoom,
+    leaveRoom,
+    toggleReady,
+    startGame,
+  };
 };

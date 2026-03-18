@@ -1,13 +1,13 @@
 # Phase 1 Backend Implementation Plan
 
 ## Overview
-**Feature:** Core Game Room & Lobby System  
-**Goal:** Establish the foundational backend infrastructure for room creation, player management, and real-time Socket.io communication.
+**Feature:** Core Game Room & Lobby System
+**Goal:** Establish the foundational backend infrastructure for room creation, player management, and real-time WebSocket communication.
 
 ### Scope
 - MongoDB connection and schema setup
 - REST API for room creation and joining
-- Socket.io integration for real-time updates
+- ElysiaJS Built-in WebSocket integration for real-time updates (Elysia.ws())
 - Basic lobby management (players join/leave)
 - Host assignment and room code generation
 
@@ -173,33 +173,53 @@ export default mongoose.model<IGameRoom>('GameRoom', GameRoomSchema);
 
 ---
 
-## Socket.io Events
+## WebSocket Events
+
+**Connection Endpoint:** `ws://<host>:<port>/ws`
+
+**Message Format:**
+All WebSocket messages follow a standard format:
+```typescript
+{
+  type: string;      // Event name
+  data: any;         // Event payload
+}
+```
 
 ### Client → Server Events
 
 #### 1. `join_room`
 ```typescript
 {
-  roomCode: string;
-  playerId: string;
+  type: 'join_room';
+  data: {
+    roomCode: string;
+    playerId: string;
+  };
 }
 ```
-**Action:** Add player to socket room, broadcast room update
+**Action:** Add player to WebSocket room channel, broadcast room update
 
 #### 2. `leave_room`
 ```typescript
 {
-  roomCode: string;
-  playerId: string;
+  type: 'leave_room';
+  data: {
+    roomCode: string;
+    playerId: string;
+  };
 }
 ```
-**Action:** Remove player from socket room, broadcast room update
+**Action:** Remove player from WebSocket room channel, broadcast room update
 
 #### 3. `ready_up`
 ```typescript
 {
-  roomCode: string;
-  playerId: string;
+  type: 'ready_up';
+  data: {
+    roomCode: string;
+    playerId: string;
+  };
 }
 ```
 **Action:** Toggle player ready status, check if all players ready
@@ -207,8 +227,11 @@ export default mongoose.model<IGameRoom>('GameRoom', GameRoomSchema);
 #### 4. `start_game`
 ```typescript
 {
-  roomCode: string;
-  hostId: string;
+  type: 'start_game';
+  data: {
+    roomCode: string;
+    hostId: string;
+  };
 }
 ```
 **Action:** Validate host, assign roles, emit `game_started`
@@ -218,44 +241,82 @@ export default mongoose.model<IGameRoom>('GameRoom', GameRoomSchema);
 #### 1. `room_updated`
 ```typescript
 {
-  roomCode: string;
-  players: IPlayer[];
-  status: string;
-  currentRound: number;
+  type: 'room_updated';
+  data: {
+    roomCode: string;
+    players: IPlayer[];
+    status: string;
+    currentRound: number;
+  };
 }
 ```
 
 #### 2. `player_joined`
 ```typescript
 {
-  playerId: string;
-  playerName: string;
-  playerCount: number;
+  type: 'player_joined';
+  data: {
+    playerId: string;
+    playerName: string;
+    playerCount: number;
+  };
 }
 ```
 
 #### 3. `player_left`
 ```typescript
 {
-  playerId: string;
-  playerName: string;
-  remainingCount: number;
+  type: 'player_left';
+  data: {
+    playerId: string;
+    playerName: string;
+    remainingCount: number;
+  };
 }
 ```
 
 #### 4. `game_started`
 ```typescript
 {
-  roomCode: string;
-  status: 'briefing';
+  type: 'game_started';
+  data: {
+    roomCode: string;
+    status: 'briefing';
+  };
 }
 ```
 
-#### 5. `error`
+#### 5. `all_players_ready`
 ```typescript
 {
-  code: string;
-  message: string;
+  type: 'all_players_ready';
+  data: {
+    roomCode: string;
+  };
+}
+```
+
+#### 6. `start_round`
+```typescript
+{
+  type: 'start_round';
+  data: {
+    question: string;
+    secretWord?: string;        // Only for Big Fish
+    canGenerateLie?: boolean;   // Only for Red Herrings
+    role: 'guesser' | 'bigFish' | 'redHerring';
+  };
+}
+```
+
+#### 7. `error`
+```typescript
+{
+  type: 'error';
+  data: {
+    code: string;
+    message: string;
+  };
 }
 ```
 
@@ -534,7 +595,7 @@ describe('Room API Endpoints', () => {
 - [ ] MongoDB connection established and working
 - [ ] GameRoom model with proper schema and validation
 - [ ] REST API endpoints for room CRUD operations
-- [ ] Socket.io integration with all defined events
+- [ ] ElysiaJS WebSocket integration with all defined events
 - [ ] Room code generation (6 chars, no confusing characters)
 - [ ] Player join/leave functionality
 - [ ] Host transfer when host leaves
@@ -552,7 +613,6 @@ describe('Room API Endpoints', () => {
 {
   "dependencies": {
     "elysia": "^1.0.0",
-    "socket.io": "^4.7.0",
     "mongoose": "^8.0.0",
     "@elysiajs/cors": "^1.0.0"
   },
@@ -563,6 +623,8 @@ describe('Room API Endpoints', () => {
 }
 ```
 
+**Note:** WebSocket support is built into ElysiaJS via `Elysia.ws()` - no additional package required.
+
 ---
 
 ## File Structure
@@ -570,22 +632,47 @@ describe('Room API Endpoints', () => {
 ```
 service/
 ├── src/
-│   ├── controllers/
-│   │   ├── room-controller.ts
-│   │   └── socket-controller.ts
-│   ├── models/
-│   │   └── game-room.ts
-│   ├── services/
-│   │   ├── room-service.ts
-│   │   └── word-bank-service.ts
-│   ├── lib/
-│   │   ├── database.ts
-│   │   └── errors.ts
-│   ├── types/
-│   │   └── index.ts
-│   ├── __tests__/
-│   │   ├── unit/
-│   │   └── integration/
-│   └── index.ts
+│   ├── models/                    # Single source of truth for types & schemas
+│   │   ├── game-room.ts           # Mongoose schema + TypeScript interfaces
+│   │   └── index.ts               # Centralized exports
+│   ├── controllers/               # Route & WebSocket handlers
+│   │   ├── room-controller.ts     # REST API endpoints
+│   │   └── ws-controller.ts       # WebSocket event handlers
+│   ├── services/                  # Core business logic
+│   │   ├── room-service.ts        # Room management & game logic
+│   │   └── word-bank-service.ts   # Word/answer generation
+│   ├── lib/                       # Utilities & infrastructure
+│   │   ├── database.ts            # MongoDB connection
+│   │   ├── errors.ts              # Custom error classes
+│   │   └── logger.ts              # Structured logging
+│   ├── types/                     # Re-exported type aliases
+│   │   └── index.ts               # API contracts & socket events
+│   ├── __tests__/                 # Test files
+│   │   ├── unit/                  # Unit tests
+│   │   └── integration/           # Integration tests
+│   └── index.ts                   # Elysia entry point
 └── package.json
+```
+
+### Import Patterns
+
+**Models (Single Source of Truth):**
+```typescript
+// Import from models directly
+import GameRoom, { IPlayer, IGameRoom } from '../models/game-room';
+
+// Or use centralized exports
+import { IPlayer, IGameRoom } from '../models';
+```
+
+**Types (Re-exported):**
+```typescript
+// Import type aliases and API contracts
+import { PlayerRole, GameStatus, CreateRoomResponse } from '../types';
+```
+
+**Services:**
+```typescript
+// Import business logic
+import { RoomService } from '../services/room-service';
 ```

@@ -14,8 +14,7 @@
   "dependencies": {
     "@elysiajs/cors": "^1.0.0",
     "elysia": "^1.0.0",
-    "mongoose": "^8.0.0",
-    "socket.io": "^4.7.0"
+    "mongoose": "^8.0.0"
   },
   "devDependencies": {
     "@types/bun": "^1.0.0",

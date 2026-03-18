@@ -9,6 +9,7 @@ This document outlines the frontend architecture, technologies, and key conventi
 *   **UI Library:** React
 *   **Styling:** TailwindCSS
 *   **HTTP Client:** Axios (for REST API requests)
+*   **Real-time:** Native WebSocket API (ElysiaWS)
 *   **Testing:** Playwright
 *   **Hosting:** Vercel
 *   **Package Manager/Runtime:** Bun (for development and build)
@@ -271,13 +272,101 @@ const GameRoomPage: React.FC = () => {
 
 ## 🌐 API Integration
 *   **Axios Client:** For all REST API requests with interceptors and error handling
-*   **Socket.io:** For all real-time game updates:
+*   **Native WebSocket:** For all real-time game updates via ElysiaWS:
+    *   Connection: `ws://localhost:3001/ws`
+    *   Message format: `{ type: string, data: any }`
     *   Room state changes
     *   Round start/end
     *   Elimination results
     *   Score updates
 
-### Axios Configuration
+### WebSocket Configuration
+```typescript
+// app/src/hooks/useWebSocket.ts
+import { useState, useEffect, useCallback, useRef } from 'react';
+
+const WS_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'ws://localhost:3001/ws';
+
+export const useWebSocket = () => {
+  const wsRef = useRef<WebSocket | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  
+  useEffect(() => {
+    const ws = new WebSocket(WS_URL);
+    
+    ws.onopen = () => setIsConnected(true);
+    ws.onclose = () => setIsConnected(false);
+    ws.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      // Handle message.type and message.data
+    };
+    
+    wsRef.current = ws;
+    return () => ws.close();
+  }, []);
+  
+  const sendMessage = (type: string, data: any) => {
+    wsRef.current?.send(JSON.stringify({ type, data }));
+  };
+  
+  return { isConnected, sendMessage };
+};
+```
+
+### Message Format
+
+**Client → Server:**
+```typescript
+{
+  type: 'join_room',
+  data: { roomCode: string; playerId: string }
+}
+
+{
+  type: 'leave_room',
+  data: { roomCode: string; playerId: string }
+}
+
+{
+  type: 'ready_up',
+  data: { roomCode: string; playerId: string }
+}
+
+{
+  type: 'start_game',
+  data: { roomCode: string }
+}
+```
+
+**Server → Client:**
+```typescript
+{
+  type: 'room_updated',
+  data: IGameRoom
+}
+
+{
+  type: 'player_joined',
+  data: { playerId: string; playerName: string; playerCount: number }
+}
+
+{
+  type: 'player_left',
+  data: { playerId: string; playerName: string; remainingCount: number }
+}
+
+{
+  type: 'game_started',
+  data: { roomCode: string; status: 'briefing' }
+}
+
+{
+  type: 'error',
+  data: { code: string; message: string }
+}
+```
+
+### API Service Example
 ```typescript
 // app/src/lib/axios.ts
 import axios from 'axios';
