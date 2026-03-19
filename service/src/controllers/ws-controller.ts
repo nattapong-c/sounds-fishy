@@ -326,6 +326,41 @@ export const wsController = new Elysia()
       // Subscribe to room channel for pub/sub (use normalized room code without prefix)
       ws.subscribe(normalizedRoomCode);
 
+      // Mark player as online and broadcast reconnection
+      if (playerId) {
+        // Mark player as online in database
+        GameRoom.findOne({ roomCode: normalizedRoomCode })
+          .then(async (room) => {
+            if (!room) return;
+
+            const player = room.players.find(p => p.playerId === playerId);
+            if (player) {
+              player.isOnline = true;
+              player.lastSeen = new Date();
+              await room.save();
+
+              // Broadcast player_reconnected to all players in room
+              ws.publish(normalizedRoomCode, JSON.stringify({
+                type: 'player_reconnected',
+                data: {
+                  playerId,
+                  playerName: player.name,
+                  isOnline: true
+                }
+              }));
+
+              // Broadcast updated room state
+              ws.publish(normalizedRoomCode, JSON.stringify({
+                type: 'room_updated',
+                data: room
+              }));
+            }
+          })
+          .catch((err) => {
+            logger.error(`Error marking player as online: ${err instanceof Error ? err.message : 'Unknown error'}`);
+          });
+      }
+
       // Send initial connection confirmation
       ws.send(JSON.stringify({
         type: 'connected',
@@ -338,7 +373,7 @@ export const wsController = new Elysia()
 
       logger.info(`❌ WS disconnected: room=${normalizedRoomCode}, player=${playerId || 'anonymous'}`);
 
-      // Handle disconnection - remove from room
+      // Handle disconnection - mark as offline, DON'T remove from room
       if (playerId && normalizedRoomCode) {
         // Remove from connections tracking
         const connections = roomConnections.get(normalizedRoomCode);
@@ -346,15 +381,14 @@ export const wsController = new Elysia()
           connections.delete(ws);
         }
 
-        // Get room state before removal
+        // Get room state before marking disconnected
         GameRoom.findOne({ roomCode: normalizedRoomCode })
           .then(async (roomBeforeLeave) => {
             if (!roomBeforeLeave) return;
 
-            const isHostLeaving = playerId === roomBeforeLeave.hostId;
-
-            // Update room in database (handles host transfer and room deletion)
-            const result = await roomService.leaveRoom(normalizedRoomCode, playerId);
+            // CRITICAL BUG FIX: Pass isDisconnect=true to prevent room deletion
+            // Mark player as disconnected (not removed from room)
+            const result = await roomService.leaveRoom(normalizedRoomCode, playerId, true); // true = isDisconnect
 
             // Handle room deletion case
             if (result.roomDeleted) {
@@ -367,26 +401,14 @@ export const wsController = new Elysia()
 
             if (!roomAfterLeave) return;
 
-            // If host transferred, broadcast host_transferred
-            if (result.newHostId) {
-              const newHost = roomAfterLeave.players.find(p => p.playerId === result.newHostId);
-              ws.publish(normalizedRoomCode, JSON.stringify({
-                type: 'host_transferred',
-                data: {
-                  newHostId: result.newHostId,
-                  newHostName: newHost?.name || 'Player'
-                }
-              }));
-            }
-
-            // Broadcast player_left to remaining players
+            // Broadcast player_disconnected (not player_left)
             ws.publish(normalizedRoomCode, JSON.stringify({
-              type: 'player_left',
+              type: 'player_disconnected',
               data: {
                 playerId,
                 playerName: roomBeforeLeave.players.find(p => p.playerId === playerId)?.name || 'Player',
-                remainingCount: roomAfterLeave.players.length,
-                newHostId: result.newHostId || undefined
+                isOnline: false,
+                lastSeen: new Date().toISOString()
               }
             }));
 
@@ -400,6 +422,9 @@ export const wsController = new Elysia()
             logger.error(`Error handling player disconnect: ${err instanceof Error ? err.message : 'Unknown error'}`);
           });
       }
+
+      // Unsubscribe after broadcasting (player still in room, just offline)
+      ws.unsubscribe(normalizedRoomCode);
     },
     message(ws, message: WSMessage) {
       handleMessage(ws, message);

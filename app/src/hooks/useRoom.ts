@@ -50,15 +50,49 @@ export const useRoom = (roomCode: string, playerId?: string): UseRoomReturn => {
     if (!isConnected) return;
 
     const handleRoomUpdate = (data: IGameRoom) => setRoom(data);
+    
     const handlePlayerJoined = (data: any) => {
       // Only log once, not on every room update
       if (process.env.NODE_ENV === 'development') {
         console.log('Player joined:', data.playerName);
       }
     };
+    
     const handlePlayerLeft = (data: any) => {
       if (process.env.NODE_ENV === 'development') {
         console.log('Player left:', data.playerName);
+      }
+    };
+
+    // Handle player disconnected
+    const handlePlayerDisconnected = (data: any) => {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Player disconnected:', data.playerName);
+      }
+      // Update room state to show player as offline
+      if (room) {
+        const updatedPlayers = room.players.map(p =>
+          p.playerId === data.playerId
+            ? { ...p, isOnline: false, lastSeen: data.lastSeen }
+            : p
+        );
+        setRoom({ ...room, players: updatedPlayers });
+      }
+    };
+
+    // Handle player reconnected
+    const handlePlayerReconnected = (data: any) => {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Player reconnected:', data.playerName);
+      }
+      // Update room state to show player as online
+      if (room) {
+        const updatedPlayers = room.players.map(p =>
+          p.playerId === data.playerId
+            ? { ...p, isOnline: true, lastSeen: new Date().toISOString() }
+            : p
+        );
+        setRoom({ ...room, players: updatedPlayers });
       }
     };
 
@@ -66,12 +100,14 @@ export const useRoom = (roomCode: string, playerId?: string): UseRoomReturn => {
     subscribe('room_updated', handleRoomUpdate);
     subscribe('player_joined', handlePlayerJoined);
     subscribe('player_left', handlePlayerLeft);
+    subscribe('player_disconnected', handlePlayerDisconnected);
+    subscribe('player_reconnected', handlePlayerReconnected);
 
     // Cleanup: unsubscribe on unmount
     return () => {
       // Unsubscribe is handled by the hook's internal cleanup
     };
-  }, [isConnected, subscribe]);
+  }, [isConnected, subscribe, room]);
 
   // WebSocket actions - memoized
   const joinRoom = useCallback(() => {
