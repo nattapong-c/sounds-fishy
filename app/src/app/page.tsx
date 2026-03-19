@@ -22,6 +22,7 @@ export default function HomePage() {
 
   // Join room state
   const [roomCode, setRoomCode] = useState('');
+  const [playerName, setPlayerName] = useState('');
   const [isJoining, setIsJoining] = useState(false);
   const [joinError, setJoinError] = useState('');
 
@@ -56,12 +57,17 @@ export default function HomePage() {
       return;
     }
 
+    if (!playerName.trim()) {
+      setJoinError('Please enter your name');
+      return;
+    }
+
     setIsJoining(true);
     setJoinError('');
 
     try {
       const response = await roomAPI.joinRoom(roomCode.toUpperCase(), {
-        playerName: 'Player', // Will be set in room page
+        playerName: playerName.trim(),
         deviceId: deviceId!,
       });
 
@@ -116,14 +122,22 @@ export default function HomePage() {
           <div className="card space-y-4 animate-slide-in-right">
             <h2 className="text-2xl font-semibold text-ocean-600">Join Room</h2>
             <p className="text-gray-600">Enter an existing game</p>
-            
+
             <Input
               placeholder="Room Code"
               value={roomCode}
               onChange={(value) => setRoomCode(value.toUpperCase())}
               onKeyPress={(e) => e.key === 'Enter' && handleJoinRoom()}
+              autoFocus
             />
-            
+
+            <Input
+              placeholder="Your name"
+              value={playerName}
+              onChange={setPlayerName}
+              onKeyPress={(e) => e.key === 'Enter' && handleJoinRoom()}
+            />
+
             {joinError && (
               <p className="text-red-600 text-sm">{joinError}</p>
             )}
@@ -133,6 +147,7 @@ export default function HomePage() {
               className="w-full"
               onClick={handleJoinRoom}
               isLoading={isJoining}
+              disabled={!playerName.trim() || !roomCode.trim()}
             >
               Join Room
             </Button>
