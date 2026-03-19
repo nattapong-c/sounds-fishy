@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import PlayerList from '@/components/players/PlayerList';
+import Toast from '@/components/ui/Toast';
 import { useRoom } from '@/hooks/useRoom';
 import { roomAPI } from '@/services/api';
 
@@ -12,6 +13,14 @@ export default function RoomPage() {
   const router = useRouter();
   const params = useParams<{ roomCode: string }>();
   const roomCode = params.roomCode;
+
+  // Toast state
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  // Memoized toast close handler
+  const closeToast = useCallback(() => {
+    setToast(null);
+  }, []);
 
   // Join form state
   const [playerName, setPlayerName] = useState('');
@@ -91,9 +100,17 @@ export default function RoomPage() {
 
   const handleCopyCode = async () => {
     try {
-      await navigator.clipboard.writeText(roomCode);
+      // Copy full URL instead of just room code
+      const fullUrl = typeof window !== 'undefined' 
+        ? window.location.href 
+        : `${window.location.origin}/room/${roomCode}`;
+      await navigator.clipboard.writeText(fullUrl);
+      
+      // Show toast notification instead of alert
+      setToast({ message: 'Room URL copied!', type: 'success' });
     } catch (err) {
       console.error('Failed to copy:', err);
+      setToast({ message: 'Failed to copy URL', type: 'error' });
     }
   };
 
@@ -216,8 +233,8 @@ export default function RoomPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={handleCopyCode}>
-              📋 Copy
+            <Button variant="ghost" size="sm" onClick={handleCopyCode} title="Copy room URL">
+              📋 Copy URL
             </Button>
             <Button variant="ghost" size="sm" onClick={handleLeaveRoom}>
               ❌ Leave
@@ -261,7 +278,7 @@ export default function RoomPage() {
               onClick={handleStartGame}
               disabled={!canStartGame}
             >
-              {canStartGame ? '🎮 Start Game' : `Waiting for players... (${room.players.length}/3 min)`}
+              {canStartGame ? '🎮 Start Game' : `Waiting for players... (${room.players.length}/3)`}
             </Button>
           )}
 
@@ -280,6 +297,15 @@ export default function RoomPage() {
           <p>🐠 <strong>Red Herrings:</strong> Bluff with fake answers</p>
         </div>
       </div>
+
+      {/* Toast notification */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={closeToast}
+        />
+      )}
     </main>
   );
 }

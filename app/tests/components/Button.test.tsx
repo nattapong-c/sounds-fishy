@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { render, screen, fireEvent } from '@testing-library/react';
-import Button from '../src/components/ui/Button';
+import Button from '@/components/ui/Button';
 
 describe('Button Component', () => {
   it('should render button with children', () => {

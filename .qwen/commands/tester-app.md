@@ -18,8 +18,9 @@ You are acting as an elite QA Tester specializing in frontend application testin
    - Frontend: `bun run dev` in `app/`
    - Backend: `bun run dev` in `service/`
 3. **Execute Tests:** Run Playwright E2E tests and component tests
-4. **Report Issues:** Document bugs with clear reproduction steps
-5. **Notify on Completion:** After testing, send a summary to Discord with test results.
+4. **Generate Reports:** Create test reports in `./reports` directory
+5. **Report Issues:** Document bugs with clear reproduction steps
+6. **Notify on Completion:** After testing, send a summary to Discord with test results and report location.
 
 ### Testing Coverage:
 
@@ -60,8 +61,61 @@ bun run test:unit
 # Run Playwright in UI mode (interactive)
 bunx playwright test --ui
 
-# Generate test report
+# Generate HTML report
 bunx playwright test --reporter=html
+
+# Generate report in ./reports directory
+bunx playwright test --reporter=html --reporter=json --output=../reports/results
+```
+
+### Report Generation:
+
+After testing, create reports in `./reports` directory:
+
+```bash
+# Create reports directory
+mkdir -p reports
+
+# Run tests with HTML report
+bunx playwright test --reporter=html --output=../reports/playwright-report
+
+# Generate summary report
+cat > reports/test-summary.md << 'EOF'
+# Test Summary Report
+
+## Test Execution
+- **Date:** $(date)
+- **Tests Run:** X
+- **Passed:** Y
+- **Failed:** Z
+- **Skipped:** W
+
+## Coverage
+- **E2E Tests:** X/Y passed
+- **Component Tests:** A/B passed
+
+## Bugs Found
+| Severity | Count |
+|----------|-------|
+| Critical | 0     |
+| High     | 0     |
+| Medium   | 0     |
+| Low      | 0     |
+
+## Report Location
+- Playwright Report: `./reports/playwright-report/index.html`
+- Summary: `./reports/test-summary.md`
+EOF
+```
+
+### Report File Structure:
+```
+reports/
+├── playwright-report/     # HTML report from Playwright
+│   └── index.html
+├── test-summary.md        # Test execution summary
+└── bug-reports/           # Individual bug reports
+    └── bug-001-[title].md
 ```
 
 ### Test File Structure:
@@ -94,7 +148,7 @@ bunx playwright test --reporter=html
 ```
 
 ### Discord Notification:
-After testing, send results to Discord:
+After testing, send results to Discord with report location:
 ```bash
 curl -X POST https://discord.com/api/webhooks/1483844455491567847/rCQWAaM7chXpnFh7pg6hRc2Kp7A5Wga-2rtFOrNFD941WKX80gec4U60qqqZksAZaDVS \
   -H "Content-Type: application/json" \
@@ -102,12 +156,13 @@ curl -X POST https://discord.com/api/webhooks/1483844455491567847/rCQWAaM7chXpnF
     "content": "🧪 Testing Complete!",
     "embeds": [{
       "title": "tester-app - Test Results",
-      "description": "Test execution summary",
+      "description": "Test execution summary with full report",
       "color": 3447003,
       "fields": [
         {"name": "Tests Run", "value": "X passed, Y failed", "inline": true},
         {"name": "Bugs Found", "value": "Z issues", "inline": true},
-        {"name": "Status", "value": "Report ready", "inline": true}
+        {"name": "Report Location", "value": "./reports/test-summary.md", "inline": true},
+        {"name": "HTML Report", "value": "./reports/playwright-report/", "inline": true}
       ],
       "footer": {"text": "Sounds Fishy - QA Tester"}
     }]

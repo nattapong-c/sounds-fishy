@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'bun:test';
 import { render, screen } from '@testing-library/react';
-import PlayerCard from '../src/components/players/PlayerCard';
+import PlayerCard from '@/components/players/PlayerCard';
 
 describe('PlayerCard Component', () => {
   const defaultProps = {
     playerName: 'TestPlayer',
     isHost: false,
+    inGameRole: null as const,
+    isOnline: true,
     isReady: false,
     isCurrentPlayer: false,
   };
@@ -20,39 +22,29 @@ describe('PlayerCard Component', () => {
     expect(screen.getByText('👑 Host')).toBeInTheDocument();
   });
 
-  it('should show ready checkmark when ready', () => {
-    render(<PlayerCard {...defaultProps} isReady={true} />);
-    const checkmark = screen.getByTestId('ready-checkmark');
-    expect(checkmark).toBeInTheDocument();
-    expect(checkmark).toHaveTextContent('✓');
+  it('should show online indicator when player is online', () => {
+    render(<PlayerCard {...defaultProps} isOnline={true} />);
+    expect(screen.getByText('Online')).toBeInTheDocument();
   });
 
-  it('should not show ready checkmark when not ready', () => {
-    render(<PlayerCard {...defaultProps} isReady={false} />);
-    expect(screen.queryByTestId('ready-checkmark')).not.toBeInTheDocument();
+  it('should show disconnected indicator when player is offline', () => {
+    render(<PlayerCard {...defaultProps} isOnline={false} />);
+    expect(screen.getByText('Disconnected')).toBeInTheDocument();
   });
 
-  it('should highlight current player', () => {
-    render(<PlayerCard {...defaultProps} isCurrentPlayer={true} />);
-    const card = screen.getByText('TestPlayer').closest('div');
-    expect(card).toHaveClass('ring-2 ring-ocean-500');
+  it('should apply grayscale and opacity when disconnected', () => {
+    const { container } = render(<PlayerCard {...defaultProps} isOnline={false} />);
+    const card = container.firstChild;
+    expect(card).toHaveClass('opacity-60', 'grayscale');
   });
 
-  it('should apply slide-in animation', () => {
-    render(<PlayerCard {...defaultProps} />);
-    const card = screen.getByText('TestPlayer').closest('div');
-    expect(card).toHaveClass('animate-slide-in-left');
+  it('should show game role badge for non-host players', () => {
+    render(<PlayerCard {...defaultProps} inGameRole="guesser" />);
+    expect(screen.getByText('🎯 Guesser')).toBeInTheDocument();
   });
 
-  it('should respect animation delay', () => {
-    const delay = 500;
-    render(<PlayerCard {...defaultProps} animationDelay={delay} />);
-    const card = screen.getByText('TestPlayer').closest('div');
-    expect(card).toHaveStyle(`animation-delay: ${delay}ms`);
-  });
-
-  it('should display fish emoji', () => {
-    render(<PlayerCard {...defaultProps} />);
-    expect(screen.getByText('🐟')).toBeInTheDocument();
+  it('should not show game role for host', () => {
+    render(<PlayerCard {...defaultProps} isHost={true} inGameRole={null} />);
+    expect(screen.queryByText('🎯 Guesser')).not.toBeInTheDocument();
   });
 });
