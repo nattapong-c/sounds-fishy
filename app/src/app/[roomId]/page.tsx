@@ -27,7 +27,15 @@ export default function RoomPage() {
         
         const ws = new WebSocket(`${wsUrl}/ws/rooms/${roomId}?deviceId=${deviceId}`);
 
-        ws.onopen = () => console.log('WebSocket connected');
+        ws.onopen = () => {
+            console.log('WebSocket connected');
+            // After connecting, fetch latest room state
+            api.rooms.get(roomId).then(response => {
+                setRoomState(response.room);
+            }).catch(err => {
+                console.error('Failed to fetch room state after WS connect:', err);
+            });
+        };
         
         ws.onmessage = (event) => {
             try {
@@ -63,7 +71,7 @@ export default function RoomPage() {
         if (!nickname.trim() || !deviceId) return;
 
         try {
-            const response = await api.rooms.join(roomId, nickname, deviceId);
+          const response = await api.rooms.join(roomId, nickname, deviceId);
             setRoomState(response.room);
             setHasJoined(true);
             connectWebSocket();

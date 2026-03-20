@@ -5,7 +5,7 @@ import { logger } from '../lib/logger';
 /**
  * WebSocket Controller
  * Real-time communication for room updates
- * 
+ *
  * Note: Phase 1.1 - No timers, players proceed at their own pace
  */
 
@@ -17,24 +17,38 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
             const { roomId } = ws.data.params;
             const { deviceId } = ws.data.query;
 
+            // Subscribe to room channel
             ws.subscribe(`room:${roomId}`);
-            logger.info({ roomId, deviceId }, 'WebSocket connected');
+            logger.info({ roomId, deviceId, subscribers: ws.subscribers }, 'WebSocket connected and subscribed to room channel');
 
             const room = await RoomModel.findOne({ roomId });
-            if (room) {
-                const player = room.players.find(p => p.deviceId === deviceId);
-                if (player) {
-                    player.isOnline = true;
-                    await room.save();
-
-                    const updatePayload = JSON.stringify({ 
-                        type: 'room_state_update', 
-                        room: room.toJSON() 
-                    });
-                    ws.publish(`room:${roomId}`, updatePayload);
-                    ws.send(updatePayload);
-                }
+            if (!room) {
+                logger.warn({ roomId, deviceId }, 'Room not found for WebSocket connection');
+                return;
             }
+
+            const player = room.players.find(p => p.deviceId === deviceId);
+            if (!player) {
+                logger.warn({ roomId, deviceId }, 'Player not found in room for WebSocket');
+                return;
+            }
+
+            // Mark player as online
+            player.isOnline = true;
+            await room.save();
+
+            // Send current room state to this player
+            const roomState = JSON.stringify({
+                type: 'room_state_update',
+                room: room.toJSON()
+            });
+            
+            // Broadcast to ALL players in the room (including self)
+            const broadcastCount = ws.publish(`room:${roomId}`, roomState);
+            logger.info({ roomId, deviceId, broadcastCount }, 'Broadcasted room state to room channel');
+            
+            // Also send directly to ensure this player receives it
+            ws.send(roomState);
         },
         async message(ws, message: any) {
             const { roomId } = ws.data.params;
@@ -44,9 +58,9 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
             if (typeof message === 'string') {
                 try {
                     parsedMessage = JSON.parse(message);
-                } catch(e) { 
+                } catch(e) {
                     logger.warn({ roomId, deviceId }, 'Invalid WebSocket message format');
-                    return; 
+                    return;
                 }
             }
 
@@ -66,7 +80,6 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
             if (player.isAdmin) {
                 /**
                  * Start Game (Phase 2 stub)
-                 * For Phase 1.1: Just validates admin and logs
                  */
                 if (parsedMessage.type === 'start_game') {
                     if (!parsedMessage.hostPlayerId) {
@@ -100,13 +113,9 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                     logger.info({ 
                         roomId, 
                         deviceId, 
-                        hostPlayerId: parsedMessage.hostPlayerId,
-                        difficulty: parsedMessage.difficulty,
-                        language: parsedMessage.language
+                        hostPlayerId: parsedMessage.hostPlayerId
                     }, 'Admin started game (Phase 2 stub)');
 
-                    // Phase 2: Will assign roles and distribute questions
-                    // For now, just acknowledge
                     ws.send(JSON.stringify({
                         type: 'game_started',
                         room: room.toJSON(),
@@ -115,17 +124,7 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                 }
 
                 /**
-                 * Update Timer Config (Phase 2 - stub for now)
-                 * Sounds Fishy has no timers, but keeping for future compatibility
-                 */
-                else if (parsedMessage.type === 'update_timer_config') {
-                    logger.info({ roomId, deviceId, config: parsedMessage.config }, 'Timer config update (not used in Sounds Fishy)');
-                    // No-op for Sounds Fishy (no timers)
-                }
-
-                /**
                  * End Round
-                 * Reset room to lobby state
                  */
                 else if (parsedMessage.type === 'end_round') {
                     logger.info({ roomId, deviceId }, 'Admin ended the round');
@@ -148,7 +147,6 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
 
                 /**
                  * Kick Player
-                 * Remove player from room
                  */
                 else if (parsedMessage.type === 'kick_player') {
                     const targetPlayerId = parsedMessage.targetPlayerId;
@@ -183,10 +181,8 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
 
             /**
              * Submit Guess (Phase 2 - stub)
-             * Guesser selects suspected Red Fish
              */
             if (parsedMessage.type === 'submit_guess') {
-                // Phase 2: Will implement scoring logic
                 logger.info({ roomId, deviceId, guess: parsedMessage.targetPlayerId }, 'Guess submitted (Phase 2 stub)');
                 ws.send(JSON.stringify({
                     type: 'guess_submitted',
@@ -206,11 +202,6 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                 if (player) {
                     player.isOnline = false;
                     await room.save();
-                    
-                    ws.publish(`room:${roomId}`, JSON.stringify({ 
-                        type: 'room_state_update', 
-                        room: room.toJSON() 
-                    }));
                 }
             }
         }
