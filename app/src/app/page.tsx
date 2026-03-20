@@ -2,10 +2,59 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Button from '@/components/ui/Button';
-import Input from '@/components/ui/Input';
-import { roomAPI } from '@/services/api';
 import { useDeviceId } from '@/hooks/useDeviceId';
+import axios from 'axios';
+
+// API Client with axios
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: { 'Content-Type': 'application/json' },
+});
+
+const roomAPI = {
+  createRoom: (data: { hostName: string; deviceId: string }) => apiClient.post('/api/rooms', data),
+  joinRoom: (roomCode: string, data: { playerName: string; deviceId: string }) => apiClient.post(`/api/rooms/${roomCode}/join`, data),
+};
+
+// UI Components
+function Button({ children, variant = 'primary', size = 'md', className = '', isLoading = false, disabled = false, ...props }: any) {
+  const variants: any = {
+    primary: 'bg-ocean-600 text-white hover:bg-ocean-700',
+    secondary: 'bg-ocean-100 text-ocean-700 hover:bg-ocean-200',
+    ghost: 'bg-transparent text-gray-700 hover:bg-gray-100',
+  };
+  const sizes: any = {
+    sm: 'px-3 py-1.5 text-sm',
+    md: 'px-6 py-3 text-base',
+    lg: 'px-8 py-4 text-lg',
+  };
+
+  return (
+    <button
+      className={`${variants[variant]} ${sizes[size]} ${className} rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
+      disabled={disabled || isLoading}
+      {...props}
+    >
+      {isLoading && (
+        <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+        </svg>
+      )}
+      {children}
+    </button>
+  );
+}
+
+function Input({ className = '', ...props }: any) {
+  return (
+    <input
+      className={`w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:border-transparent transition-all ${className}`}
+      {...props}
+    />
+  );
+}
 
 /**
  * Home Page
@@ -50,8 +99,8 @@ export default function HomePage() {
         deviceId: deviceId!,
       });
 
-      if (response.success) {
-        router.push(`/room/${response.data.roomCode}`);
+      if (response.data.success) {
+        router.push(`/room/${response.data.data.roomCode}`);
       }
     } catch (err: any) {
       setCreateError(err.response?.data?.error || 'Failed to create room');
@@ -80,19 +129,15 @@ export default function HomePage() {
     setJoinError('');
 
     try {
-      console.log('[JoinRoom] Calling API with:', { roomCode: roomCode.toUpperCase(), deviceId });
       const response = await roomAPI.joinRoom(roomCode.toUpperCase(), {
         playerName: playerName.trim(),
         deviceId: deviceId,
       });
 
-      console.log('[JoinRoom] API Response:', response);
-
-      if (response.success) {
-        router.push(`/room/${response.data.roomCode}`);
+      if (response.data.success) {
+        router.push(`/room/${response.data.data.roomCode}`);
       }
     } catch (err: any) {
-      console.error('[JoinRoom] Error:', err);
       setJoinError(err.response?.data?.error || 'Failed to join room');
     } finally {
       setIsJoining(false);
@@ -122,18 +167,18 @@ export default function HomePage() {
 
         <div className="grid md:grid-cols-2 gap-6">
           {/* Create Room Card */}
-          <div className="card space-y-4 animate-slide-in-left">
+          <div className="bg-white rounded-xl shadow-lg p-6 space-y-4 animate-slide-in-left">
             <h2 className="text-2xl font-semibold text-ocean-600">Create Room</h2>
             <p className="text-gray-600">Start a new game session</p>
-            
+
             <Input
               placeholder="Your name"
               value={hostName}
-              onChange={setHostName}
-              onKeyPress={(e) => e.key === 'Enter' && handleCreateRoom()}
+              onChange={(e: any) => setHostName(e.target.value)}
+              onKeyPress={(e: any) => e.key === 'Enter' && handleCreateRoom()}
               autoFocus
             />
-            
+
             {createError && (
               <p className="text-red-600 text-sm">{createError}</p>
             )}
@@ -149,23 +194,22 @@ export default function HomePage() {
           </div>
 
           {/* Join Room Card */}
-          <div className="card space-y-4 animate-slide-in-right">
+          <div className="bg-white rounded-xl shadow-lg p-6 space-y-4 animate-slide-in-right">
             <h2 className="text-2xl font-semibold text-ocean-600">Join Room</h2>
             <p className="text-gray-600">Enter an existing game</p>
 
             <Input
               placeholder="Room Code"
               value={roomCode}
-              onChange={(value) => setRoomCode(value.toUpperCase())}
-              onKeyPress={(e) => e.key === 'Enter' && handleJoinRoom()}
-              autoFocus
+              onChange={(e: any) => setRoomCode(e.target.value.toUpperCase())}
+              onKeyPress={(e: any) => e.key === 'Enter' && handleJoinRoom()}
             />
 
             <Input
               placeholder="Your name"
               value={playerName}
-              onChange={setPlayerName}
-              onKeyPress={(e) => e.key === 'Enter' && handleJoinRoom()}
+              onChange={(e: any) => setPlayerName(e.target.value)}
+              onKeyPress={(e: any) => e.key === 'Enter' && handleJoinRoom()}
             />
 
             {joinError && (
@@ -185,7 +229,7 @@ export default function HomePage() {
         </div>
 
         {/* Game Info */}
-        <div className="card text-center space-y-4">
+        <div className="bg-white rounded-xl shadow-lg p-6 text-center space-y-4">
           <h3 className="text-lg font-semibold text-gray-700">How to Play:</h3>
           <div className="grid md:grid-cols-3 gap-4 text-sm text-gray-600">
             <div>

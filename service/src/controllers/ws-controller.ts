@@ -22,11 +22,6 @@ interface LeaveRoomData {
   deviceId: string;
 }
 
-interface ReadyUpData {
-  roomCode: string;
-  deviceId: string;
-}
-
 interface StartGameData {
   roomCode: string;
 }
@@ -60,10 +55,6 @@ async function handleMessage(ws: any, message: WSMessage) {
 
       case 'leave_room':
         await handleLeaveRoom(ws, data as LeaveRoomData);
-        break;
-
-      case 'ready_up':
-        await handleReadyUp(ws, data as ReadyUpData);
         break;
 
       case 'start_game':
@@ -147,18 +138,28 @@ async function handleJoinRoom(ws: any, data: JoinRoomData) {
       data: room
     });
 
-    // CRITICAL FIX: If room is already in briefing status, send start_round to late-joiner
+    // CRITICAL FIX: If room is already in briefing status, send start_round to late-joiner (only once)
     if (room.status === 'briefing' && player.inGameRole) {
-      logger.info({ roomCode: normalizedRoomCode, deviceId, role: player.inGameRole }, 'Late joiner detected - sending start_round');
+      // Check if player has already received start_round (track in session)
+      const hasReceivedStartRound = ws.data?.hasReceivedStartRound;
+      
+      if (!hasReceivedStartRound) {
+        logger.info({ roomCode: normalizedRoomCode, deviceId, role: player.inGameRole }, 'Late joiner detected - sending start_round');
 
-      const payload = gameService.getRoleSpecificPayload(player, room);
-      ws.send({
-        type: 'start_round',
-        data: payload
-      });
+        const payload = gameService.getRoleSpecificPayload(player, room);
+        ws.send({
+          type: 'start_round',
+          data: payload
+        });
 
-      logger.info({ deviceId, role: player.inGameRole }, 'Sent start_round to late joiner');
-    } else if (room.status === 'briefing') {
+        // Mark that this player has received start_round
+        ws.data = { ...ws.data, hasReceivedStartRound: true };
+        
+        logger.info({ deviceId, role: player.inGameRole }, 'Sent start_round to late joiner');
+      } else {
+        logger.debug({ deviceId }, 'Player already received start_round, skipping');
+      }
+    } else if (room.status === 'briefing' && !player.inGameRole) {
       // Player doesn't have a role yet - this shouldn't happen, but log it
       logger.warn({ roomCode: normalizedRoomCode, deviceId, role: player.inGameRole }, 'Late joiner without role - room status is briefing');
     }
@@ -279,35 +280,6 @@ async function handleLeaveRoom(ws: any, data: LeaveRoomData) {
 }
 
 /**
- * Handle ready_up event
- */
-async function handleReadyUp(ws: any, data: ReadyUpData) {
-  const { roomCode, deviceId } = data;
-  const normalizedRoomCode = roomCode.toUpperCase();
-
-  try {
-    const { allReady, room } = await gameService.toggleReadyAndCheck(normalizedRoomCode, deviceId);
-
-    // Broadcast updated room state
-    ws.publish(normalizedRoomCode, { type: 'room_updated', data: room });
-
-    // If all players ready, notify
-    if (allReady) {
-      ws.publish(normalizedRoomCode, { type: 'all_players_ready', data: { roomCode: normalizedRoomCode } });
-    }
-  } catch (error) {
-    logger.error(`Error in ready_up: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    ws.send({
-      type: 'error',
-      data: {
-        code: 'READY_ERROR',
-        message: error instanceof Error ? error.message : 'Failed to toggle ready'
-      }
-    });
-  }
-}
-
-/**
  * Handle start_game event
  */
 async function handleStartGame(ws: any, data: StartGameData) {
@@ -351,8 +323,8 @@ async function handleStartGame(ws: any, data: StartGameData) {
       type: 'start_round_broadcast',
       data: { message: 'Game started, check your role' }
     });
-    
-    logger.info({ roomCode: normalizedRoomCode, connections: connections?.size || 0 }, 'Game started');
+
+    logger.info({ roomCode: normalizedRoomCode }, 'Game started');
   } catch (error) {
     logger.error({ error: error instanceof Error ? error.message : 'Unknown error' }, 'Error in start_game');
     ws.send({
@@ -423,7 +395,7 @@ export const wsController = new Elysia()
       // Subscribe to room channel for pub/sub (use normalized room code without prefix)
       ws.subscribe(normalizedRoomCode);
 
-      // Mark player as online and broadcast reconnection ONLY if they were previously offline
+      // Mark player as online and broadcast reconnection
       if (deviceId) {
         // Mark player as online in database
         GameRoom.findOne({ roomCode: normalizedRoomCode })
@@ -432,25 +404,22 @@ export const wsController = new Elysia()
 
             const player = room.players.find(p => p.deviceId === deviceId);
             if (player) {
-              // Only broadcast reconnection if player was previously offline
-              const wasOffline = !player.isOnline;
+              // Always mark player as online
               player.isOnline = true;
               player.lastSeen = new Date();
               await room.save();
 
-              // Broadcast player_reconnected ONLY if player was offline
-              if (wasOffline) {
-                ws.publish(normalizedRoomCode, JSON.stringify({
-                  type: 'player_reconnected',
-                  data: {
-                    deviceId,
-                    playerName: player.name,
-                    isOnline: true
-                  }
-                }));
-              }
+              // Broadcast player_reconnected to all players (including self)
+              ws.publish(normalizedRoomCode, JSON.stringify({
+                type: 'player_reconnected',
+                data: {
+                  deviceId,
+                  playerName: player.name,
+                  isOnline: true
+                }
+              }));
 
-              // Broadcast updated room state
+              // Broadcast updated room state to all players
               ws.publish(normalizedRoomCode, JSON.stringify({
                 type: 'room_updated',
                 data: room

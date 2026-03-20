@@ -11,7 +11,6 @@ export interface IPlayer {
   isOnline: boolean;
   lastSeen: Date;
   score: number;
-  isReady: boolean;
   generatedLie?: string | null;
 }
 
@@ -75,10 +74,6 @@ const playerSchema = new Schema<IPlayer>({
   score: {
     type: Number,
     default: 0,
-  },
-  isReady: {
-    type: Boolean,
-    default: false,
   },
   generatedLie: {
     type: String,

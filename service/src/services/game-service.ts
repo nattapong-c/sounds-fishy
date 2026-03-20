@@ -47,14 +47,14 @@ export class GameService {
       throw new BadRequestError('Game has already started');
     }
 
-    // Count non-host players for role assignment
-    const nonHostPlayers = room.players.filter(p => !p.isHost);
-    if (nonHostPlayers.length < 2) {
-      throw new BadRequestError('Need at least 2 non-host players to start');
+    // Count total players (host + players) for role assignment
+    const totalPlayers = room.players.length;
+    if (totalPlayers < 3) {
+      throw new BadRequestError('Need at least 3 players to start');
     }
 
     // Fetch question from question bank
-    const questionData = await questionBankService.getRandomQuestion(nonHostPlayers.length);
+    const questionData = await questionBankService.getRandomQuestion(totalPlayers);
 
     // Store question data in room
     room.aiConfig = {
@@ -83,20 +83,6 @@ export class GameService {
       room,
       aiConfig: room.aiConfig,
     };
-  }
-
-  /**
-   * Check if all players are ready
-   */
-  checkAllPlayersReady(room: IGameRoom): boolean {
-    // Only check non-host players
-    const nonHostPlayers = room.players.filter(p => !p.isHost);
-
-    if (nonHostPlayers.length === 0) {
-      return false;
-    }
-
-    return nonHostPlayers.every(p => p.isReady);
   }
 
   /**
@@ -151,37 +137,6 @@ export class GameService {
   }
 
   /**
-   * Toggle player ready status and check if all ready
-   */
-  async toggleReadyAndCheck(roomCode: string, playerId: string): Promise<{
-    allReady: boolean;
-    room: IGameRoom;
-  }> {
-    const room = await GameRoom.findOne({ roomCode: roomCode.toUpperCase() });
-
-    if (!room) {
-      throw new NotFoundError('Room not found');
-    }
-
-    const player = room.players.find(p => p.deviceId === playerId);
-    if (!player) {
-      throw new NotFoundError('Player not found');
-    }
-
-    // Toggle ready status
-    player.isReady = !player.isReady;
-    await room.save();
-
-    // Check if all non-host players are ready
-    const allReady = this.checkAllPlayersReady(room);
-
-    return {
-      allReady,
-      room,
-    };
-  }
-
-  /**
    * Get role-specific payload for start_round event
    */
   getRoleSpecificPayload(player: IPlayer, room: IGameRoom): RoleSpecificPayload {
@@ -221,22 +176,18 @@ export class GameService {
 
   /**
    * Assign roles to players (1 Guesser, 1 Big Fish, rest Red Herrings)
-   * Host does not get a game role
+   * Host is included in role assignment (all players play)
    */
   private _assignRoles(players: IPlayer[]): void {
     const shuffled = [...players].sort(() => Math.random() - 0.5);
 
-    // Separate host from role assignment
-    const host = shuffled.find(p => p.isHost);
-    const nonHostPlayers = shuffled.filter(p => !p.isHost);
+    // Minimum 3 players needed for the game
+    if (shuffled.length >= 3) {
+      shuffled[0].inGameRole = 'guesser';
+      shuffled[1].inGameRole = 'bigFish';
 
-    // Only assign game roles if we have at least 2 non-host players
-    if (nonHostPlayers.length >= 2) {
-      nonHostPlayers[0].inGameRole = 'guesser';
-      nonHostPlayers[1].inGameRole = 'bigFish';
-
-      for (let i = 2; i < nonHostPlayers.length; i++) {
-        nonHostPlayers[i].inGameRole = 'redHerring';
+      for (let i = 2; i < shuffled.length; i++) {
+        shuffled[i].inGameRole = 'redHerring';
       }
     }
   }
