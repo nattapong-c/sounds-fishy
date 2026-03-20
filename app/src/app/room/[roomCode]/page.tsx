@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
@@ -8,12 +8,16 @@ import PlayerList from '@/components/players/PlayerList';
 import { useRoom } from '@/hooks/useRoom';
 import { useDeviceId } from '@/hooks/useDeviceId';
 import { roomAPI } from '@/services/api';
+import GuesserView from '@/components/game/GuesserView';
+import BigFishView from '@/components/game/BigFishView';
+import RedHerringView from '@/components/game/RedHerringView';
+import WaitingForPlayers from '@/components/game/WaitingForPlayers';
 
 /**
- * Lobby Page
- * Room lobby where players wait for game to start
+ * Room Page - Single Page for All Game Phases
+ * Handles: lobby, briefing, playing, roundEnd
  */
-export default function LobbyPage() {
+export default function RoomPage() {
   const router = useRouter();
   const params = useParams<{ roomCode: string }>();
   const roomCode = params.roomCode;
@@ -21,10 +25,8 @@ export default function LobbyPage() {
 
   // State
   const [playerName, setPlayerName] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState('');
-  const [hasValidated, setHasValidated] = useState(false);
-  const [isValidPlayer, setIsValidPlayer] = useState(false);
 
   // Room hook
   const {
@@ -36,34 +38,62 @@ export default function LobbyPage() {
     leaveRoom,
     toggleReady,
     startGame,
+    refreshRoom,
   } = useRoom(roomCode, deviceId || undefined);
+
+  // Briefing state (managed locally)
+  const [role, setRole] = useState<'guesser' | 'bigFish' | 'redHerring' | null>(null);
+  const [question, setQuestion] = useState('');
+  const [secretWord, setSecretWord] = useState<string | undefined>();
+  const [canGenerateLie, setCanGenerateLie] = useState(false);
+  const [bluffSuggestions, setBluffSuggestions] = useState<string[]>([]);
+  const [allPlayersReady, setAllPlayersReady] = useState(false);
 
   // Validate player is in room
   useEffect(() => {
     if (!deviceId || !room) return;
 
     const playerInRoom = room.players.find(p => p.deviceId === deviceId);
-    
+
     if (!playerInRoom) {
-      setIsValidPlayer(false);
-      setHasValidated(true);
+      // Player not in room - this is normal for first-time visitors
       return;
     }
 
-    setIsValidPlayer(true);
-    setHasValidated(true);
+    console.log('[Validate] Player found in room:', playerInRoom.name);
+    setIsJoining(false);
 
     // Join room via WebSocket
     joinRoom();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deviceId, room, isConnected]);
 
-  // Check if game has started
+  // Handle room status changes and phase transitions
   useEffect(() => {
-    if (room && room.status !== 'lobby') {
-      router.push(`/room/${roomCode}/${room.status}`);
+    if (!room) return;
+
+    console.log('[RoomPage] Room status changed:', room.status);
+
+    // Handle briefing phase
+    if (room.status === 'briefing' && room.aiConfig) {
+      // Set briefing data from room
+      setQuestion(room.aiConfig.question || room.question || '');
+      setSecretWord(room.aiConfig.correctAnswer || room.secretWord);
+
+      // Determine player role
+      const player = room.players.find(p => p.deviceId === deviceId);
+      if (player) {
+        setRole(player.inGameRole);
+        setCanGenerateLie(player.inGameRole === 'redHerring');
+        setBluffSuggestions(room.aiConfig.bluffSuggestions || []);
+      }
     }
-  }, [room, roomCode, router]);
+
+    // Handle all players ready
+    const nonHostPlayers = room.players.filter(p => !p.isHost);
+    const allReady = nonHostPlayers.length > 0 && nonHostPlayers.every(p => p.isReady);
+    setAllPlayersReady(allReady);
+  }, [room, deviceId]);
 
   const handleJoinRoom = async () => {
     if (!playerName.trim()) {
@@ -71,7 +101,7 @@ export default function LobbyPage() {
       return;
     }
 
-    setIsLoading(true);
+    setIsJoining(true);
     setError('');
 
     try {
@@ -81,14 +111,13 @@ export default function LobbyPage() {
       });
 
       if (response.success) {
-        // Reset validation to allow re-check
-        setHasValidated(false);
-        setIsValidPlayer(false);
+        console.log('[JoinRoom] Successfully joined, refreshing room data...');
+        refreshRoom();
       }
     } catch (err: any) {
+      console.error('[JoinRoom] Error:', err);
       setError(err.response?.data?.error || 'Failed to join room');
-    } finally {
-      setIsLoading(false);
+      setIsJoining(false);
     }
   };
 
@@ -116,13 +145,8 @@ export default function LobbyPage() {
     }
   };
 
-  const handleToggleReady = async () => {
-    if (!deviceId) return;
-    try {
-      toggleReady();
-    } catch (err) {
-      console.error('Failed to toggle ready:', err);
-    }
+  const handleToggleReady = () => {
+    toggleReady();
   };
 
   const handleStartGame = async () => {
@@ -133,20 +157,48 @@ export default function LobbyPage() {
     }
   };
 
-  // Show loading while waiting for validation
-  if (deviceId && !hasValidated && !roomLoading) {
+  const handleGenerateLie = async (): Promise<string> => {
+    try {
+      const response = await roomAPI.generateLie({ roomCode, deviceId: deviceId! });
+      if (response.success) {
+        return response.data.lieSuggestion;
+      }
+      throw new Error(response.error || 'Failed to generate lie');
+    } catch (err) {
+      console.error('Failed to generate lie:', err);
+      throw err;
+    }
+  };
+
+  // Show loading state
+  if (roomLoading || isJoining) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <main className="min-h-screen bg-gradient-to-br from-ocean-50 to-ocean-100 flex items-center justify-center p-4">
         <div className="text-center space-y-4">
           <div className="text-6xl animate-bounce">🐟</div>
-          <p className="text-gray-600">Joining room...</p>
+          <p className="text-gray-600">{isJoining ? 'Joining room...' : 'Loading...'}</p>
+          {isJoining && <p className="text-sm text-gray-500">Please wait...</p>}
         </div>
-      </div>
+      </main>
     );
   }
 
-  // Show join form if not valid player
-  if (!deviceId || !isValidPlayer) {
+  // Show error state
+  if (roomError || !room) {
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-ocean-50 to-ocean-100 flex items-center justify-center p-4">
+        <div className="max-w-md w-full text-center space-y-4">
+          <div className="text-6xl">❌</div>
+          <p className="text-red-600">{roomError || 'Room not found'}</p>
+          <Button onClick={() => router.push('/')}>Back to Home</Button>
+        </div>
+      </main>
+    );
+  }
+
+  // Show join form if player not in room
+  const playerInRoom = room.players.find(p => p.deviceId === deviceId);
+  if (!playerInRoom) {
     return (
       <main className="min-h-screen bg-gradient-to-br from-ocean-50 to-ocean-100 flex items-center justify-center p-4">
         <div className="max-w-md w-full">
@@ -186,7 +238,7 @@ export default function LobbyPage() {
                 variant="primary"
                 className="flex-1"
                 onClick={handleJoinRoom}
-                isLoading={isLoading}
+                isLoading={isJoining}
               >
                 Join Room
               </Button>
@@ -203,27 +255,83 @@ export default function LobbyPage() {
     );
   }
 
-  // Show error if room not found
-  if (roomError || !room) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="text-6xl">❌</div>
-          <p className="text-red-600">{roomError || 'Room not found'}</p>
-          <Button onClick={() => router.push('/')}>Back to Home</Button>
-        </div>
-      </div>
-    );
-  }
-
-  // Show room view
+  // Get current player info
   const currentPlayer = room.players.find(p => p.deviceId === deviceId);
   const isHost = room.hostId === deviceId;
   const isReady = currentPlayer?.isReady ?? false;
-  const nonHostPlayers = room.players.filter(p => p.deviceId !== room.hostId);
-  const allPlayersReady = nonHostPlayers.length > 0 && nonHostPlayers.every(p => p.isReady);
+  const nonHostPlayers = room.players.filter(p => !p.isHost);
   const canStartGame = isHost && allPlayersReady && room.players.length >= 3;
 
+  // Render based on room status
+  if (room.status === 'briefing') {
+    // Briefing Phase
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-ocean-50 to-ocean-100 p-4 py-8">
+        <div className="max-w-4xl mx-auto">
+          {/* Header */}
+          <div className="text-center mb-6">
+            <h1 className="text-3xl font-bold text-ocean-600 mb-2">🎮 Game Briefing</h1>
+            <p className="text-gray-600">
+              Room: <span className="font-mono font-bold">{roomCode}</span>
+            </p>
+          </div>
+
+          {/* Role-Specific Content */}
+          <div className="mb-8">
+            {role === 'guesser' && (
+              <GuesserView question={question} />
+            )}
+
+            {role === 'bigFish' && secretWord && (
+              <BigFishView question={question} secretWord={secretWord} />
+            )}
+
+            {role === 'redHerring' && (
+              <RedHerringView
+                question={question}
+                bluffSuggestions={bluffSuggestions}
+                onGenerateLie={handleGenerateLie}
+              />
+            )}
+          </div>
+
+          {/* Ready Button (not for Guesser) */}
+          {role && role !== 'guesser' && (
+            <div className="text-center">
+              <Button
+                variant={isReady ? 'secondary' : 'primary'}
+                size="lg"
+                onClick={handleToggleReady}
+                className="min-w-[200px]"
+              >
+                {isReady ? '✓ Ready' : "I'm Ready"}
+              </Button>
+              <p className="text-sm text-gray-500 mt-2">
+                Click when you&apos;ve reviewed your information
+              </p>
+            </div>
+          )}
+
+          {/* Waiting for all players */}
+          {allPlayersReady && (
+            <div className="mt-8 text-center">
+              <WaitingForPlayers
+                players={room.players}
+                currentDeviceId={deviceId || undefined}
+              />
+              {isHost && (
+                <div className="mt-4">
+                  <p className="text-gray-600 mb-2">All players ready! Starting game...</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </main>
+    );
+  }
+
+  // Lobby Phase (default)
   return (
     <main className="min-h-screen bg-gradient-to-br from-ocean-50 to-ocean-100 p-4">
       <div className="max-w-2xl mx-auto space-y-6">
@@ -296,7 +404,7 @@ export default function LobbyPage() {
         <div className="card text-sm text-gray-600 space-y-2">
           <h3 className="font-semibold">How to Play:</h3>
           <p>🎯 <strong>Guesser:</strong> Read the question and find the Big Fish</p>
-          <p>🐟 <strong>Big Fish:</strong> Know the real answer, don't get caught</p>
+          <p>🐟 <strong>Big Fish:</strong> Know the real answer, don&apos;t get caught</p>
           <p>🐠 <strong>Red Herrings:</strong> Bluff with fake answers</p>
         </div>
       </div>

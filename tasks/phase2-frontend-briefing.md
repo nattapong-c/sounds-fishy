@@ -1,6 +1,6 @@
 # Phase 2: Frontend - Game Briefing & AI Integration
 
-**Status:** ⏳ Not Started  
+**Status:** ✅ Completed  
 **Created:** 2026-03-19  
 **Target:** 2026-03-21  
 **Total Tasks:** 7
@@ -16,10 +16,46 @@ Implement the briefing phase UI where players receive their role-specific inform
 - Ready status management
 - Waiting for all players UI
 
+**Note:** Phase 2.5 will update UI to use MongoDB question bank instead of AI generation. User experience remains the same.
+
 ## Tasks
 
 ### Completed ✅
-- None yet
+- [x] T5. Add Generate Lie API Method
+  - **Completed:** 2026-03-19
+  - **Agent:** frontend-nextjs-expert
+  - **Files:** `app/src/services/api.ts`
+  - **Notes:** Added generateLie() and regenerateAi() methods with TypeScript types.
+- [x] T2. Create Secret Reveal Component
+  - **Completed:** 2026-03-19
+  - **Agent:** frontend-nextjs-expert
+  - **Files:** `app/src/components/game/SecretReveal.tsx`
+  - **Notes:** Interactive "Tap to Reveal" with blur effect, smooth animation, and haptic feedback.
+- [x] T3. Create Lie Generator Component
+  - **Completed:** 2026-03-19
+  - **Agent:** frontend-nextjs-expert
+  - **Files:** `app/src/components/game/LieGenerator.tsx`
+  - **Notes:** AI lie generation with loading state, copy to clipboard, and lie history (last 5).
+- [x] T4. Create Briefing Hook
+  - **Completed:** 2026-03-19
+  - **Agent:** frontend-nextjs-expert
+  - **Files:** `app/src/hooks/useBriefing.ts`
+  - **Notes:** Manages WebSocket events (start_round, all_players_ready), generateLie(), toggleReady().
+- [x] T6. Create Role-Specific Components
+  - **Completed:** 2026-03-19
+  - **Agent:** frontend-nextjs-expert
+  - **Files:** `app/src/components/game/GuesserView.tsx`, `BigFishView.tsx`, `RedHerringView.tsx`
+  - **Notes:** Three distinct views with role-specific instructions and styling.
+- [x] T7. Add Waiting for Players State
+  - **Completed:** 2026-03-19
+  - **Agent:** frontend-nextjs-expert
+  - **Files:** `app/src/components/game/WaitingForPlayers.tsx`
+  - **Notes:** Shows ready/not-ready players, progress bar, animated indicator.
+- [x] T1. Create Briefing Page
+  - **Completed:** 2026-03-19
+  - **Agent:** frontend-nextjs-expert
+  - **Files:** `app/src/app/room/[roomCode]/briefing/page.tsx`
+  - **Notes:** Main briefing page with role-based rendering, ready button, error handling.
 
 ### In Progress 🔄
 - None yet

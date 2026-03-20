@@ -1,6 +1,6 @@
 # Phase 2: Backend - Game Briefing & AI Integration
 
-**Status:** ⏳ Not Started  
+**Status:** ✅ Completed  
 **Created:** 2026-03-19  
 **Target:** 2026-03-21  
 **Total Tasks:** 6
@@ -16,10 +16,41 @@ Implement the game briefing phase with AI-powered question and answer generation
 - Lie generation for Red Herrings
 - WebSocket events for briefing flow
 
+**Note:** Phase 2.5 will replace AI generation with MongoDB question bank for production use. AI service remains as optional fallback.
+
 ## Tasks
 
 ### Completed ✅
-- None yet
+- [x] T6. Create Word Bank Service (Fallback)
+  - **Completed:** 2026-03-19
+  - **Agent:** backend-bun-expert
+  - **Files:** `service/src/services/word-bank-service.ts`
+  - **Notes:** Created 50+ question/answer pairs across 10 categories. Includes getRandomQuestion(), generateRoundData(), and generateLieSuggestion() methods.
+- [x] T3. Update Room Model
+  - **Completed:** 2026-03-19
+  - **Agent:** backend-bun-expert
+  - **Files:** `service/src/models/game-room.ts`
+  - **Notes:** Model already has all required fields (aiConfig, question, secretWord, generatedLie). No changes needed.
+- [x] T1. Create AI Service
+  - **Completed:** 2026-03-19
+  - **Agent:** backend-bun-expert
+  - **Files:** `service/src/services/ai-service.ts`, `service/src/lib/ai-config.ts`
+  - **Notes:** OpenAI-compatible API integration with automatic word bank fallback. Supports configurable API key, base URL, and model. **Note: Will be replaced by question bank in Phase 2.5**
+- [x] T2. Create Game Service
+  - **Completed:** 2026-03-19
+  - **Agent:** backend-bun-expert
+  - **Files:** `service/src/services/game-service.ts`
+  - **Notes:** Core briefing logic - startBriefing(), generateLieForPlayer(), toggleReadyAndCheck(), getRoleSpecificPayload(). Role assignment included. **Note: Will be updated in Phase 2.5 to use question bank**
+- [x] T4. Add Briefing WebSocket Handler
+  - **Completed:** 2026-03-19
+  - **Agent:** backend-bun-expert
+  - **Files:** `service/src/controllers/ws-controller.ts`
+  - **Notes:** Added handleGenerateLie(), updated handleReadyUp() and handleStartGame() to use gameService. Role-specific payloads sent via start_round event.
+- [x] T5. Add AI Configuration to Room Controller
+  - **Completed:** 2026-03-19
+  - **Agent:** backend-bun-expert
+  - **Files:** `service/src/controllers/room-controller.ts`
+  - **Notes:** Added POST /api/rooms/:roomCode/regenerate-ai endpoint (host only). Allows regenerating AI data if not satisfied. **Note: Optional feature, may be deprecated in Phase 2.5**
 
 ### In Progress 🔄
 - None yet

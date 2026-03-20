@@ -1,6 +1,7 @@
 import { Elysia, t } from 'elysia';
 import GameRoom, { IPlayer } from '../models/game-room';
 import { roomService, type LeaveRoomResult } from '../services/room-service';
+import { gameService } from '../services/game-service';
 import { logger } from '../lib/logger';
 
 /**
@@ -28,6 +29,11 @@ interface ReadyUpData {
 
 interface StartGameData {
   roomCode: string;
+}
+
+interface GenerateLieData {
+  roomCode: string;
+  deviceId: string;
 }
 
 /**
@@ -64,12 +70,16 @@ async function handleMessage(ws: any, message: WSMessage) {
         await handleStartGame(ws, data as StartGameData);
         break;
 
+      case 'generate_lie':
+        await handleGenerateLie(ws, data as GenerateLieData);
+        break;
+
       default:
-        logger.warn(`Unknown WS message type: ${type}`);
+        logger.warn({ type }, 'Unknown WS message type');
         ws.send({ type: 'error', data: { code: 'UNKNOWN_MESSAGE', message: 'Unknown message type' } });
     }
   } catch (error) {
-    logger.error(`WS error handling ${type}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    logger.error({ type, error: error instanceof Error ? error.message : 'Unknown error' }, 'WS error handling message');
     ws.send({
       type: 'error',
       data: {
@@ -136,6 +146,22 @@ async function handleJoinRoom(ws: any, data: JoinRoomData) {
       type: 'room_updated',
       data: room
     });
+
+    // CRITICAL FIX: If room is already in briefing status, send start_round to late-joiner
+    if (room.status === 'briefing' && player.inGameRole) {
+      logger.info({ roomCode: normalizedRoomCode, deviceId, role: player.inGameRole }, 'Late joiner detected - sending start_round');
+
+      const payload = gameService.getRoleSpecificPayload(player, room);
+      ws.send({
+        type: 'start_round',
+        data: payload
+      });
+
+      logger.info({ deviceId, role: player.inGameRole }, 'Sent start_round to late joiner');
+    } else if (room.status === 'briefing') {
+      // Player doesn't have a role yet - this shouldn't happen, but log it
+      logger.warn({ roomCode: normalizedRoomCode, deviceId, role: player.inGameRole }, 'Late joiner without role - room status is briefing');
+    }
   } else {
     // Player not found in room - send error
     ws.send({ type: 'error', data: { code: 'PLAYER_NOT_FOUND', message: 'Player not found in room' } });
@@ -259,17 +285,25 @@ async function handleReadyUp(ws: any, data: ReadyUpData) {
   const { roomCode, deviceId } = data;
   const normalizedRoomCode = roomCode.toUpperCase();
 
-  const allReady = await roomService.toggleReady(normalizedRoomCode, deviceId);
+  try {
+    const { allReady, room } = await gameService.toggleReadyAndCheck(normalizedRoomCode, deviceId);
 
-  // Broadcast updated room state
-  const room = await GameRoom.findOne({ roomCode: normalizedRoomCode });
-  if (room) {
+    // Broadcast updated room state
     ws.publish(normalizedRoomCode, { type: 'room_updated', data: room });
 
     // If all players ready, notify
     if (allReady) {
       ws.publish(normalizedRoomCode, { type: 'all_players_ready', data: { roomCode: normalizedRoomCode } });
     }
+  } catch (error) {
+    logger.error(`Error in ready_up: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    ws.send({
+      type: 'error',
+      data: {
+        code: 'READY_ERROR',
+        message: error instanceof Error ? error.message : 'Failed to toggle ready'
+      }
+    });
   }
 }
 
@@ -280,36 +314,86 @@ async function handleStartGame(ws: any, data: StartGameData) {
   const { roomCode } = data;
   const normalizedRoomCode = roomCode.toUpperCase();
 
-  const room = await roomService.startGame(normalizedRoomCode);
+  try {
+    // Start briefing phase (generates AI data, assigns roles)
+    const { room } = await gameService.startBriefing(normalizedRoomCode);
 
-  // Broadcast game started
-  ws.publish(normalizedRoomCode, {
-    type: 'game_started',
-    data: {
-      roomCode: normalizedRoomCode,
-      status: room.status
-    }
-  });
+    // Broadcast game started
+    ws.publish(normalizedRoomCode, {
+      type: 'game_started',
+      data: {
+        roomCode: normalizedRoomCode,
+        status: room.status
+      }
+    });
 
-  // Send role-specific payloads to all players in the room
-  const connections = roomConnections.get(normalizedRoomCode);
-  if (connections) {
-    for (const connection of connections) {
-      const deviceId = connection.data?.deviceId;
-      const player = room.players.find(p => p.deviceId === deviceId);
+    // Send role-specific payloads to ALL players in the room via broadcast
+    // Each player will receive their own role-specific data
+    const connections = roomConnections.get(normalizedRoomCode);
+    if (connections) {
+      for (const connection of connections) {
+        const deviceId = connection.data?.deviceId;
+        const player = room.players.find(p => p.deviceId === deviceId);
 
-      if (player) {
-        connection.send({
-          type: 'start_round',
-          data: {
-            question: room.question || 'Question not generated',
-            secretWord: player.inGameRole === 'bigFish' ? room.secretWord : undefined,
-            canGenerateLie: player.inGameRole === 'redHerring',
-            role: player.inGameRole
-          }
-        });
+        if (player) {
+          const payload = gameService.getRoleSpecificPayload(player, room);
+          // Send directly to this specific connection
+          connection.send({
+            type: 'start_round',
+            data: payload
+          });
+        }
       }
     }
+    
+    // Also broadcast to ensure all players receive it (fallback)
+    ws.publish(normalizedRoomCode, {
+      type: 'start_round_broadcast',
+      data: { message: 'Game started, check your role' }
+    });
+    
+    logger.info({ roomCode: normalizedRoomCode, connections: connections?.size || 0 }, 'Game started');
+  } catch (error) {
+    logger.error({ error: error instanceof Error ? error.message : 'Unknown error' }, 'Error in start_game');
+    ws.send({
+      type: 'error',
+      data: {
+        code: 'START_ERROR',
+        message: error instanceof Error ? error.message : 'Failed to start game'
+      }
+    });
+  }
+}
+
+/**
+ * Handle generate_lie event (for Red Herring players)
+ */
+async function handleGenerateLie(ws: any, data: GenerateLieData) {
+  const { roomCode, deviceId } = data;
+  const normalizedRoomCode = roomCode.toUpperCase();
+
+  try {
+    const result = await gameService.generateLieForPlayer(normalizedRoomCode, deviceId);
+
+    // Send lie suggestion to the requesting player
+    ws.send({
+      type: 'lie_generated',
+      data: {
+        lieSuggestion: result.lieSuggestion,
+        usedFallback: result.usedFallback
+      }
+    });
+
+    logger.info({ playerId: deviceId, roomCode: normalizedRoomCode }, 'Lie generated');
+  } catch (error) {
+    logger.error({ error: error instanceof Error ? error.message : 'Unknown error' }, 'Error in generate_lie');
+    ws.send({
+      type: 'error',
+      data: {
+        code: 'LIE_ERROR',
+        message: error instanceof Error ? error.message : 'Failed to generate lie'
+      }
+    });
   }
 }
 
@@ -334,7 +418,7 @@ export const wsController = new Elysia()
       const { roomCode, deviceId } = ws.data.query;
       const normalizedRoomCode = roomCode.toUpperCase();
 
-      logger.info(`✅ WS connected: room=${normalizedRoomCode}, device=${deviceId || 'anonymous'}`);
+      logger.info({ roomCode: normalizedRoomCode, deviceId }, '✅ WS connected');
 
       // Subscribe to room channel for pub/sub (use normalized room code without prefix)
       ws.subscribe(normalizedRoomCode);
@@ -374,7 +458,7 @@ export const wsController = new Elysia()
             }
           })
           .catch((err) => {
-            logger.error(`Error marking player as online: ${err instanceof Error ? error.message : 'Unknown error'}`);
+            logger.error({ error: err instanceof Error ? err.message : 'Unknown error' }, 'Error marking player as online');
           });
       }
 
@@ -388,7 +472,7 @@ export const wsController = new Elysia()
       const { roomCode, deviceId } = ws.data.query;
       const normalizedRoomCode = roomCode.toUpperCase();
 
-      logger.info(`❌ WS disconnected: room=${normalizedRoomCode}, device=${deviceId || 'anonymous'}`);
+      logger.info({ roomCode: normalizedRoomCode, deviceId }, '❌ WS disconnected');
 
       // Handle disconnection - mark as offline, DON'T remove from room
       if (deviceId && normalizedRoomCode) {
@@ -409,7 +493,7 @@ export const wsController = new Elysia()
 
             // Handle room deletion case
             if (result.roomDeleted) {
-              logger.info(`Room ${normalizedRoomCode} deleted due to host disconnection`);
+              logger.info({ roomCode: normalizedRoomCode }, 'Room deleted due to host disconnection');
               return;
             }
 
@@ -436,7 +520,7 @@ export const wsController = new Elysia()
             }));
           })
           .catch((err) => {
-            logger.error(`Error handling player disconnect: ${err instanceof Error ? error.message : 'Unknown error'}`);
+            logger.error({ error: err instanceof Error ? err.message : 'Unknown error' }, 'Error handling player disconnect');
           });
       }
 

@@ -15,6 +15,7 @@ interface UseRoomReturn {
   leaveRoom: () => void;
   toggleReady: () => void;
   startGame: () => void;
+  refreshRoom: () => void; // Add refresh function
 }
 
 /**
@@ -28,26 +29,31 @@ export const useRoom = (roomCode: string, deviceId?: string): UseRoomReturn => {
   const { connectionState, isConnected, sendMessage, subscribe, unsubscribe } = useWebSocket(roomCode, deviceId);
 
   // Fetch initial room data
-  useEffect(() => {
-    const fetchRoom = async () => {
-      try {
-        const data = await roomAPI.getRoom(roomCode);
-        if (data.success) {
-          setRoom(data.data);
-        } else {
-          setError(data.error?.message || 'Room not found');
-        }
-      } catch (err: any) {
-        setError(err.response?.data?.error || 'Failed to connect to room');
-      } finally {
-        setIsLoading(false);
+  const fetchRoom = useCallback(async () => {
+    try {
+      const data = await roomAPI.getRoom(roomCode);
+      if (data.success) {
+        setRoom(data.data);
+      } else {
+        setError(data.error?.message || 'Room not found');
       }
-    };
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to connect to room');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [roomCode]);
 
+  useEffect(() => {
     if (roomCode) {
       fetchRoom();
     }
-  }, [roomCode]);
+  }, [roomCode, fetchRoom]);
+
+  // Refresh room data manually
+  const refreshRoom = useCallback(() => {
+    fetchRoom();
+  }, [fetchRoom]);
 
   // Subscribe to WebSocket events
   useEffect(() => {
@@ -150,5 +156,6 @@ export const useRoom = (roomCode: string, deviceId?: string): UseRoomReturn => {
     leaveRoom,
     toggleReady,
     startGame,
+    refreshRoom,
   };
 };

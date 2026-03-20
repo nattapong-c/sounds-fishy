@@ -23,9 +23,13 @@ const app = new Elysia()
   .get('/health', () => ({ status: 'ok', timestamp: new Date().toISOString() }))
   .listen(process.env.PORT || 3001);
 
-logger.info(
-  `🐟 Sounds Fishy is running at ${app.server?.hostname}:${app.server?.port}`,
-);
-logger.info(`🔌 WebSocket endpoint: ws://${app.server?.hostname}:${app.server?.port}/ws`);
+logger.info({
+  hostname: app.server?.hostname,
+  port: app.server?.port,
+}, '🐟 Sounds Fishy API started');
+
+logger.info({
+  websocket: `ws://${app.server?.hostname}:${app.server?.port}/ws`,
+}, '🔌 WebSocket endpoint ready');
 
 export type AppRouter = typeof app;

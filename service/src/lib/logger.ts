@@ -1,26 +1,31 @@
+import pino, { Logger } from 'pino';
+
 const logLevel = process.env.LOG_LEVEL || 'info';
 
-const colors = {
-  info: '\x1b[36m',  // Cyan
-  warn: '\x1b[33m',  // Yellow
-  error: '\x1b[31m', // Red
-  reset: '\x1b[0m',
+/**
+ * Pino logger instance
+ * Configured with pretty print for development
+ */
+export const logger: Logger = pino({
+  level: logLevel,
+  transport: {
+    target: 'pino-pretty',
+    options: {
+      colorize: true,
+      translateTime: 'SYS:standard',
+      ignore: 'pid,hostname',
+    },
+  },
+});
+
+/**
+ * Legacy logger wrapper for backward compatibility
+ * @deprecated Use logger.info(), logger.warn(), logger.error() directly
+ */
+export const legacyLogger = {
+  info: (message: string) => logger.info(message),
+  warn: (message: string) => logger.warn(message),
+  error: (message: string) => logger.error(message),
 };
 
-export const logger = {
-  info: (message: string) => {
-    if (['info', 'warn', 'error'].includes(logLevel)) {
-      console.log(`${colors.info}[INFO]${colors.reset} ${message}`);
-    }
-  },
-  warn: (message: string) => {
-    if (['warn', 'error'].includes(logLevel)) {
-      console.warn(`${colors.warn}[WARN]${colors.reset} ${message}`);
-    }
-  },
-  error: (message: string) => {
-    if (['error'].includes(logLevel)) {
-      console.error(`${colors.error}[ERROR]${colors.reset} ${message}`);
-    }
-  },
-};
+export default logger;

@@ -1,5 +1,6 @@
 import GameRoom, { IPlayer, IGameRoom } from '../models/game-room';
 import { NotFoundError, BadRequestError } from '../lib/errors';
+import { logger } from '../lib/logger';
 
 /**
  * Result of a player leaving a room
@@ -60,33 +61,43 @@ export class RoomService {
    * @param deviceId - Player's device ID (persistent identity)
    */
   async joinRoom(roomCode: string, playerName: string, deviceId: string): Promise<IPlayer> {
-    const room = await GameRoom.findOne({ roomCode: roomCode.toUpperCase() });
+    logger.info({ roomCode, playerName, deviceId }, 'joinRoom called');
     
+    const room = await GameRoom.findOne({ roomCode: roomCode.toUpperCase() });
+    logger.info({ roomCode, found: !!room, status: room?.status, players: room?.players.length }, 'Room query result');
+
     if (!room) {
+      logger.warn({ roomCode }, 'Room not found');
       throw new NotFoundError('Room not found');
     }
-    
+
     if (room.status !== 'lobby') {
+      logger.warn({ roomCode, status: room.status }, 'Game already started');
       throw new BadRequestError('Game already started');
     }
-    
+
     if (room.players.length >= 8) {
+      logger.warn({ roomCode }, 'Room is full');
       throw new BadRequestError('Room is full');
     }
 
     // Check if player with this deviceId already exists (reconnection)
     const existingPlayer = room.players.find(p => p.deviceId === deviceId);
-    
+    logger.info({ roomCode, deviceId, exists: !!existingPlayer }, 'Existing player check');
+
     if (existingPlayer) {
       // RECONNECTION: Same deviceId = same player
+      logger.info({ deviceId }, 'Player reconnected');
       existingPlayer.isOnline = true;
       existingPlayer.name = playerName; // Update name if changed
       existingPlayer.lastSeen = new Date();
       await room.save();
+      logger.info({ deviceId }, 'Reconnection saved successfully');
       return existingPlayer;
     }
 
     // NEW PLAYER: Add to room
+    logger.info({ deviceId, playerName }, 'New player joining');
     const newPlayer: IPlayer = {
       deviceId,
       name: playerName,
@@ -98,8 +109,9 @@ export class RoomService {
     };
 
     room.players.push(newPlayer);
+    logger.info({ roomCode, playerCount: room.players.length }, 'Saving room');
     await room.save();
-
+    logger.info({ deviceId, playerName }, 'New player saved successfully');
     return newPlayer;
   }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
@@ -14,7 +14,7 @@ import { useDeviceId } from '@/hooks/useDeviceId';
 export default function HomePage() {
   const router = useRouter();
   const deviceId = useDeviceId();
-  
+
   // Create room state
   const [hostName, setHostName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
@@ -25,6 +25,15 @@ export default function HomePage() {
   const [playerName, setPlayerName] = useState('');
   const [isJoining, setIsJoining] = useState(false);
   const [joinError, setJoinError] = useState('');
+
+  // Wait for deviceId to be ready
+  const [isDeviceIdReady, setIsDeviceIdReady] = useState(false);
+
+  useEffect(() => {
+    if (deviceId) {
+      setIsDeviceIdReady(true);
+    }
+  }, [deviceId]);
 
   const handleCreateRoom = async () => {
     if (!hostName.trim()) {
@@ -62,24 +71,45 @@ export default function HomePage() {
       return;
     }
 
+    if (!deviceId) {
+      setJoinError('Initializing... please wait a moment');
+      return;
+    }
+
     setIsJoining(true);
     setJoinError('');
 
     try {
+      console.log('[JoinRoom] Calling API with:', { roomCode: roomCode.toUpperCase(), deviceId });
       const response = await roomAPI.joinRoom(roomCode.toUpperCase(), {
         playerName: playerName.trim(),
-        deviceId: deviceId!,
+        deviceId: deviceId,
       });
+
+      console.log('[JoinRoom] API Response:', response);
 
       if (response.success) {
         router.push(`/room/${response.data.roomCode}`);
       }
     } catch (err: any) {
+      console.error('[JoinRoom] Error:', err);
       setJoinError(err.response?.data?.error || 'Failed to join room');
     } finally {
       setIsJoining(false);
     }
   };
+
+  // Show loading while deviceId is being initialized
+  if (!isDeviceIdReady) {
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-ocean-50 to-ocean-100 flex items-center justify-center p-4">
+        <div className="text-center space-y-4">
+          <div className="text-6xl animate-bounce">🐟</div>
+          <p className="text-gray-600">Initializing...</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-ocean-50 to-ocean-100 flex items-center justify-center p-4">

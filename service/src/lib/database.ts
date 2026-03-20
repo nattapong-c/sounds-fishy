@@ -15,12 +15,12 @@ export async function connectDB(): Promise<void> {
 
     await mongoose.connect(mongoUri);
 
-    logger.info('✅ MongoDB connected successfully');
-    logger.info(`📦 Database: ${mongoose.connection.name}`);
+    logger.info({}, '✅ MongoDB connected successfully');
+    logger.info({ database: mongoose.connection.name }, '📦 Database connected');
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    logger.error(`❌ MongoDB connection error: ${errorMessage}`);
-    logger.error('\n⚠️  To fix this, choose one option:');
+    logger.error({ error: errorMessage }, '❌ MongoDB connection error');
+    logger.error('To fix this, choose one option:');
     logger.error('  1. Install MongoDB locally:');
     logger.error('     brew install mongodb-community');
     logger.error('     brew services start mongodb-community\n');
@@ -38,9 +38,9 @@ export async function connectDB(): Promise<void> {
 export async function disconnectDB(): Promise<void> {
   try {
     await mongoose.disconnect();
-    logger.info('🔌 MongoDB disconnected');
+    logger.info({}, '🔌 MongoDB disconnected');
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    logger.error(`Error disconnecting MongoDB: ${errorMessage}`);
+    logger.error({ error: errorMessage }, 'Error disconnecting MongoDB');
   }
 }

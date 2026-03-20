@@ -12,11 +12,21 @@ export interface JoinRoomData {
   deviceId: string;
 }
 
+export interface GenerateLieData {
+  roomCode: string;
+  deviceId: string;
+}
+
 // Response types
 interface ApiResponse<T> {
   success: boolean;
   data: T;
   error?: string;
+}
+
+export interface GenerateLieResponse {
+  lieSuggestion: string;
+  usedFallback: boolean;
 }
 
 /**
@@ -70,5 +80,23 @@ export const roomAPI = {
   startGame: async (roomCode: string): Promise<ApiResponse<{ roomCode: string; status: string }>> => {
     const response = await apiClient.post(`/api/rooms/${roomCode}/start`);
     return response.data as ApiResponse<{ roomCode: string; status: string }>;
+  },
+
+  /**
+   * Generate lie for Red Herring (Phase 2)
+   */
+  generateLie: async (data: GenerateLieData): Promise<ApiResponse<GenerateLieResponse>> => {
+    const response = await apiClient.post(`/api/rooms/${data.roomCode}/generate-lie`, {
+      deviceId: data.deviceId
+    });
+    return response.data as ApiResponse<GenerateLieResponse>;
+  },
+
+  /**
+   * Regenerate AI data (host only, Phase 2)
+   */
+  regenerateAi: async (roomCode: string, deviceId: string): Promise<ApiResponse<{ aiConfig: any; usedFallback: boolean }>> => {
+    const response = await apiClient.post(`/api/rooms/${roomCode}/regenerate-ai`, { deviceId });
+    return response.data as ApiResponse<{ aiConfig: any; usedFallback: boolean }>;
   },
 };
