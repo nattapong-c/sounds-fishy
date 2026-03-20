@@ -75,35 +75,46 @@ A digital "Secret Screen" companion app for the "Sounds Fishy" board game. Desig
 
 ---
 
-## 📂 Project Structure
-Following a **Clean Code** approach to separate concerns between the UI and the Game Engine.
+## 📂 Current Project Structure
 
-```text
+**Simplified Architecture (Inline Components):**
+
+```
 sounds-fishy/
 ├── app/                        # Frontend (Next.js)
 │   ├── src/
-│   │   ├── app/                # Next.js App Router (Routes & Pages)
-│   │   ├── components/         # Atomic UI components
-│   │   ├── hooks/              # Custom React hooks (Game state, Socket)
-│   │   ├── lib/                # Shared utilities & API clients
-│   │   ├── services/           # Frontend business logic
-│   │   └── types/              # Frontend TypeScript definitions
-│   ├── public/                 # Static assets (Assets for cards/roles)
-│   ├── next.config.mjs
-│   └── tailwind.config.ts
+│   │   ├── app/
+│   │   │   ├── page.tsx        # Home page (inline components)
+│   │   │   └── room/[roomCode]/
+│   │   │       └── page.tsx    # Lobby/Briefing (inline components)
+│   │   └── hooks/
+│   │       └── useDeviceId.ts  # Device identity (shared)
+│   ├── package.json
+│   └── .env.local
 │
-├── service/                    # Backend (Elysia)
+├── service/                    # Backend (ElysiaJS)
 │   ├── src/
-│   │   ├── controllers/        # Route & WebSocket handlers
-│   │   ├── models/             # MongoDB Schemas / Mongoose models
-│   │   ├── services/           # Core Game Logic (Role distribution, Word bank)
-│   │   ├── lib/                # Database connection & Middlewares
-│   │   └── index.ts            # Elysia entry point
-│   ├── bun.lockb
-│   └── package.json
+│   │   ├── controllers/
+│   │   │   ├── room-controller.ts
+│   │   │   └── ws-controller.ts
+│   │   ├── models/
+│   │   │   └── game-room.ts
+│   │   ├── services/
+│   │   │   ├── room-service.ts
+│   │   │   └── game-service.ts
+│   │   ├── lib/
+│   │   │   ├── database.ts
+│   │   │   └── logger.ts
+│   │   └── index.ts
+│   ├── package.json
+│   └── .env
 │
-└── README.md                   # Project documentation
+├── tasks/                      # Task documentation
+├── reports/                    # Research
+└── README.md                   # Main documentation
 ```
+
+**Note:** All UI components (Button, Input, PlayerCard, etc.) and hooks (useBriefing) are now inline in page files for simpler architecture.
 
 ---
 
