@@ -287,15 +287,15 @@ async function handleStartGame(ws: any, data: StartGameData) {
   const normalizedRoomCode = roomCode.toUpperCase();
 
   try {
-    // Start briefing phase (generates AI data, assigns roles)
-    const { room } = await gameService.startBriefing(normalizedRoomCode);
+    // Start guessing phase (generates question, assigns roles)
+    const { room } = await gameService.startGame(normalizedRoomCode);
 
-    // Broadcast game started
+    // Broadcast game started with guessing status
     ws.publish(normalizedRoomCode, {
       type: 'game_started',
       data: {
         roomCode: normalizedRoomCode,
-        status: room.status
+        status: room.status  // 'guessing'
       }
     });
 

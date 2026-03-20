@@ -5,13 +5,12 @@ import { logger } from '../lib/logger';
 
 /**
  * Game Service
- * Handles game logic for briefing phase and beyond
- * Manages role assignment, ready status, and lie generation
+ * Handles game logic for guessing phase
+ * Manages role assignment, question selection, and lie distribution
  */
 
-export interface StartBriefingResult {
+export interface StartGameResult {
   room: IGameRoom;
-  aiConfig: IAiConfig;
 }
 
 export interface GenerateLieResult {
@@ -23,20 +22,21 @@ export interface RoleSpecificPayload {
   question: string;
   role: 'guesser' | 'bigFish' | 'redHerring' | 'spectator';
   secretWord?: string;
-  canGenerateLie?: boolean;
+  fakeAnswer?: string;
+  lieSuggestion?: string;
   bluffSuggestions?: string[];
   isHost?: boolean;
 }
 
 export class GameService {
   /**
-   * Start briefing phase
+   * Start guessing phase
    * - Fetch question from question bank (or word bank fallback)
    * - Store in room's aiConfig
    * - Assign roles if not already assigned
-   * - Update room status to 'briefing'
+   * - Update room status to 'guessing'
    */
-  async startBriefing(roomCode: string): Promise<StartBriefingResult> {
+  async startGame(roomCode: string): Promise<StartGameResult> {
     const room = await GameRoom.findOne({ roomCode: roomCode.toUpperCase() });
 
     if (!room) {
@@ -72,16 +72,15 @@ export class GameService {
     // Assign roles if not already done
     this._assignRoles(room.players);
 
-    // Update status
-    room.status = 'briefing';
+    // Update status to 'guessing' (not 'briefing')
+    room.status = 'guessing';
     await room.save();
 
-    logger.info({ roomCode, question: questionData.question }, 'Briefing started');
+    logger.info({ roomCode, question: questionData.question }, 'Guessing phase started');
     logger.info({ roomCode, source: questionData.usedFallback ? 'Word Bank' : 'Question Bank' }, 'Data source');
 
     return {
       room,
-      aiConfig: room.aiConfig,
     };
   }
 
@@ -141,6 +140,7 @@ export class GameService {
    */
   getRoleSpecificPayload(player: IPlayer, room: IGameRoom): RoleSpecificPayload {
     const question = room.question || room.aiConfig?.question || 'Question not generated';
+    const bluffSuggestions = room.aiConfig?.bluffSuggestions || [];
 
     switch (player.inGameRole) {
       case 'guesser':
@@ -157,10 +157,16 @@ export class GameService {
         };
 
       case 'redHerring':
+        // Assign unique fake answer and lie suggestion to each Red Herring
+        const redHerringIndex = this._getRedHerringIndex(player, room.players);
+        const fakeAnswer = bluffSuggestions[redHerringIndex % bluffSuggestions.length] || 'A lie';
+        const lieSuggestion = bluffSuggestions[(redHerringIndex + 1) % bluffSuggestions.length] || 'Another lie';
+        
         return {
           question,
-          canGenerateLie: true,
-          bluffSuggestions: room.aiConfig?.bluffSuggestions || [],
+          fakeAnswer,  // MANDATORY - what they must say
+          lieSuggestion,  // Optional hint
+          bluffSuggestions,  // For reference
           role: 'redHerring',
         };
 
@@ -172,6 +178,15 @@ export class GameService {
           isHost: player.isHost,
         };
     }
+  }
+
+  /**
+   * Get the index of this Red Herring among all Red Herrings
+   * Used to assign unique fake answers
+   */
+  private _getRedHerringIndex(player: IPlayer, players: IPlayer[]): number {
+    const redHerrings = players.filter(p => p.inGameRole === 'redHerring');
+    return redHerrings.findIndex(p => p.deviceId === player.deviceId);
   }
 
   /**

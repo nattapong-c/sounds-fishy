@@ -32,7 +32,7 @@ export interface IGameRoom extends Document {
   roomCode: string;
   hostId: string;
   players: IPlayer[];
-  status: 'lobby' | 'briefing' | 'playing' | 'roundEnd';
+  status: 'lobby' | 'guessing' | 'playing' | 'roundEnd';
   question?: string;
   secretWord?: string;
   aiConfig?: IAiConfig;
@@ -106,7 +106,7 @@ const gameRoomSchema = new Schema<IGameRoom>({
   },
   status: {
     type: String,
-    enum: ['lobby', 'briefing', 'playing', 'roundEnd'],
+    enum: ['lobby', 'guessing', 'playing', 'roundEnd'],
     default: 'lobby',
   },
   question: {

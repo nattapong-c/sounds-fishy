@@ -21,7 +21,7 @@ interface IGameRoom {
   roomCode: string;
   hostId: string;
   players: IPlayer[];
-  status: 'lobby' | 'briefing' | 'playing' | 'roundEnd';
+  status: 'lobby' | 'guessing' | 'playing' | 'roundEnd';
   question?: string;
   secretWord?: string;
   aiConfig?: {
@@ -49,29 +49,40 @@ const roomAPI = {
   startGame: (roomCode: string) => apiClient.post(`/api/rooms/${roomCode}/start`),
 };
 
-// Briefing Hook
-function useBriefing(roomCode: string, deviceId?: string, room: IGameRoom | null = null) {
+// Guessing Hook
+function useGuessing(roomCode: string, deviceId?: string, room: IGameRoom | null = null) {
   const [role, setRole] = useState<'guesser' | 'bigFish' | 'redHerring' | null>(null);
   const [question, setQuestion] = useState('');
   const [secretWord, setSecretWord] = useState<string | undefined>();
-  const [canGenerateLie, setCanGenerateLie] = useState(false);
+  const [fakeAnswer, setFakeAnswer] = useState<string | undefined>();
+  const [lieSuggestion, setLieSuggestion] = useState<string | undefined>();
   const [bluffSuggestions, setBluffSuggestions] = useState<string[]>([]);
 
   useEffect(() => {
-    if (!room || room.status !== 'briefing' || !room.aiConfig) return;
+    if (!room || room.status !== 'guessing' || !room.aiConfig) return;
 
     setQuestion(room.aiConfig.question || room.question || '');
     setSecretWord(room.aiConfig.correctAnswer || room.secretWord);
+    setBluffSuggestions(room.aiConfig.bluffSuggestions || []);
 
     const player = room.players.find(p => p.deviceId === deviceId);
     if (player) {
       setRole(player.inGameRole);
-      setCanGenerateLie(player.inGameRole === 'redHerring');
-      setBluffSuggestions(room.aiConfig.bluffSuggestions || []);
+      // Note: fakeAnswer and lieSuggestion will come from WebSocket start_round event
     }
   }, [room, deviceId]);
 
-  return { role, question, secretWord, canGenerateLie, bluffSuggestions };
+  // Method to set role-specific data from WebSocket
+  const setRoleData = useCallback((data: any) => {
+    if (data.role === 'redHerring') {
+      setFakeAnswer(data.fakeAnswer);
+      setLieSuggestion(data.lieSuggestion);
+    } else if (data.role === 'bigFish') {
+      setSecretWord(data.secretWord);
+    }
+  }, []);
+
+  return { role, question, secretWord, fakeAnswer, lieSuggestion, bluffSuggestions, setRoleData };
 }
 
 // WebSocket Hook
@@ -131,13 +142,14 @@ function useRoom(roomCode: string, deviceId?: string) {
       if (message.type === 'room_updated') {
         setRoom({ ...message.data, players: [...message.data.players] });
       } else if (message.type === 'game_started') {
-        // Update room status to briefing when game starts
+        // Update room status to guessing when game starts
         setRoom((prevRoom) => {
           if (!prevRoom) return prevRoom;
-          return { ...prevRoom, status: 'briefing' as const };
+          return { ...prevRoom, status: 'guessing' as const };
         });
       } else if (message.type === 'start_round') {
-        // Handle start round if needed
+        // Handle start round - set role-specific data
+        console.log('[RoomPage] Received start_round:', message.data);
       }
     };
 
@@ -289,30 +301,40 @@ function BigFishView({ question, secretWord }: { question: string; secretWord: s
   );
 }
 
-function RedHerringView({ question, bluffSuggestions }: { question: string; bluffSuggestions: string[] }) {
+function RedHerringView({ question, fakeAnswer, lieSuggestion }: { question: string; fakeAnswer?: string; lieSuggestion?: string }) {
   return (
     <div className="w-full max-w-2xl mx-auto space-y-6">
       <div className="text-center space-y-2">
         <div className="text-5xl mb-2">🐠</div>
         <h2 className="text-2xl font-bold text-ocean-600">You are a Red Herring</h2>
-        <p className="text-gray-600">Bluff with fake answers!</p>
+        <p className="text-gray-600">Use your assigned fake answer!</p>
       </div>
       <div className="bg-gradient-to-br from-ocean-50 to-blue-50 border-2 border-ocean-200 rounded-xl p-8">
         <p className="text-sm font-medium text-ocean-600 mb-3 uppercase">Question</p>
         <p className="text-2xl font-bold text-gray-800">{question}</p>
       </div>
-      <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
-        <h3 className="font-semibold text-gray-800">Bluff Suggestions:</h3>
-        {bluffSuggestions.map((bluff, i) => (
-          <div key={i} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-            <p className="text-gray-700">{bluff}</p>
-          </div>
-        ))}
+      <div className="bg-red-50 border-2 border-red-300 rounded-xl p-6">
+        <h3 className="font-semibold text-red-800 mb-2 flex items-center gap-2">
+          <span className="text-xl">🎯</span>
+          Your Answer (MUST USE):
+        </h3>
+        <p className="text-xl font-bold text-red-900 bg-white rounded-lg p-4 border-2 border-red-200">
+          {fakeAnswer || 'Loading...'}
+        </p>
+        <p className="text-sm text-red-700 mt-2">⚠️ You MUST say this answer out loud!</p>
       </div>
-      <div className="bg-purple-50 border border-purple-200 rounded-xl p-6">
-        <h3 className="font-semibold text-purple-800 mb-2">💡 Tip</h3>
-        <p className="text-purple-700">Use one of the bluff suggestions above, or create your own believable lie!</p>
-      </div>
+      {lieSuggestion && (
+        <div className="bg-purple-50 border border-purple-200 rounded-xl p-6">
+          <h3 className="font-semibold text-purple-800 mb-2 flex items-center gap-2">
+            <span className="text-xl">💡</span>
+            Hint (Optional):
+          </h3>
+          <p className="text-lg text-purple-900 bg-white rounded-lg p-3 border border-purple-200">
+            {lieSuggestion}
+          </p>
+          <p className="text-sm text-purple-700 mt-2">Just for inspiration - you don't have to use this</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -331,8 +353,8 @@ export default function RoomPage() {
 
   const { room, isLoading, isConnected, joinRoom, leaveRoom, startGame, refreshRoom } = useRoom(roomCode, deviceId || undefined);
 
-  // Use briefing hook
-  const { role, question, secretWord, canGenerateLie, bluffSuggestions } = useBriefing(roomCode, deviceId || undefined, room);
+  // Use guessing hook
+  const { role, question, secretWord, fakeAnswer, lieSuggestion, bluffSuggestions } = useGuessing(roomCode, deviceId || undefined, room);
 
   // Validate player is in room
   useEffect(() => {
@@ -447,18 +469,18 @@ export default function RoomPage() {
     );
   }
 
-  // Briefing Phase
-  if (room.status === 'briefing') {
+  // Guessing Phase
+  if (room.status === 'guessing') {
     return (
       <main className="min-h-screen bg-gradient-to-br from-ocean-50 to-ocean-100 p-4 py-8">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-6">
-            <h1 className="text-3xl font-bold text-ocean-600 mb-2">🎮 Game Briefing</h1>
+            <h1 className="text-3xl font-bold text-ocean-600 mb-2">🎮 Guessing Phase</h1>
             <p className="text-gray-600">Room: <span className="font-mono font-bold">{roomCode}</span></p>
           </div>
           {role === 'guesser' && <GuesserView question={question} />}
           {role === 'bigFish' && secretWord && <BigFishView question={question} secretWord={secretWord} />}
-          {role === 'redHerring' && <RedHerringView question={question} bluffSuggestions={bluffSuggestions} />}
+          {role === 'redHerring' && <RedHerringView question={question} fakeAnswer={fakeAnswer} lieSuggestion={lieSuggestion} />}
           {!role && room.hostId === deviceId && (
             <div className="card text-center space-y-4">
               <div className="text-6xl">⏳</div>

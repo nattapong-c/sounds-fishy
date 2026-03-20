@@ -1,6 +1,13 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 /**
+ * Question Bank Model interface with static methods
+ */
+interface IQuestionBankModel extends mongoose.Model<IQuestionBank> {
+  getRandom(difficulty?: 'easy' | 'medium' | 'hard'): Promise<IQuestionBank | null>;
+}
+
+/**
  * Question bank document interface
  * Represents a pre-generated question with answers and lie suggestions
  */
@@ -106,4 +113,4 @@ questionBankSchema.statics.getRandom = async function(
 };
 
 // Export model
-export default mongoose.model<IQuestionBank>('QuestionBank', questionBankSchema);
+export default mongoose.model<IQuestionBank, IQuestionBankModel>('QuestionBank', questionBankSchema);

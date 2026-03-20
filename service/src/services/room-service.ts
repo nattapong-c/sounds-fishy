@@ -47,7 +47,6 @@ export class RoomService {
         inGameRole: null,
         isOnline: true,
         score: 0,
-        isReady: false
       }]
     });
 
@@ -104,8 +103,8 @@ export class RoomService {
       isHost: false,
       inGameRole: null,
       isOnline: true,
+      lastSeen: new Date(),
       score: 0,
-      isReady: false
     };
 
     room.players.push(newPlayer);
@@ -200,35 +199,6 @@ export class RoomService {
   }
 
   /**
-   * Toggle player ready status
-   * @param roomCode - Room code
-   * @param deviceId - Player's device ID
-   * @returns true if all non-host players are ready
-   */
-  async toggleReady(roomCode: string, deviceId: string): Promise<boolean> {
-    const room = await GameRoom.findOne({ roomCode: roomCode.toUpperCase() });
-    
-    if (!room) {
-      throw new NotFoundError('Room not found');
-    }
-
-    const player = room.players.find(p => p.deviceId === deviceId);
-    
-    if (!player) {
-      throw new NotFoundError('Player not found');
-    }
-
-    player.isReady = !player.isReady;
-    await room.save();
-
-    // Check if all non-host players are ready
-    const nonHostPlayers = room.players.filter(p => !p.isHost);
-    const allReady = nonHostPlayers.length > 0 && nonHostPlayers.every(p => p.isReady);
-    
-    return allReady;
-  }
-
-  /**
    * Assign roles for game start
    * CRITICAL: Host is separate from game roles - host does not get a game role
    * @param players - Array of players to assign roles to
@@ -271,7 +241,7 @@ export class RoomService {
 
     // Assign roles
     this.assignRoles(room.players);
-    room.status = 'briefing';
+    room.status = 'guessing';
     await room.save();
 
     return room;

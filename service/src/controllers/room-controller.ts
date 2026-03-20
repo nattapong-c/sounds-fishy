@@ -170,44 +170,6 @@ export const roomController = new Elysia({ prefix: '/api' })
     }
   )
 
-  // POST /api/rooms/:roomCode/ready - Toggle ready status
-  .post('/rooms/:roomCode/ready',
-    async ({ params, body, set }) => {
-      try {
-        const { roomCode } = params;
-        const { deviceId } = body;
-
-        if (!deviceId) {
-          set.status = 400;
-          return { success: false, error: 'Device ID is required' };
-        }
-
-        const allReady = await roomService.toggleReady(roomCode, deviceId);
-
-        return {
-          success: true,
-          data: { allReady }
-        };
-      } catch (error) {
-        if (error instanceof CustomAppError) {
-          set.status = error.statusCode;
-          return { success: false, error: error.message };
-        }
-        logger.error(error, 'Failed to toggle ready');
-        set.status = 500;
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : 'Failed to toggle ready'
-        };
-      }
-    },
-    {
-      body: t.Object({
-        deviceId: t.String()
-      })
-    }
-  )
-
   // POST /api/rooms/:roomCode/start - Start game (host only)
   .post('/rooms/:roomCode/start',
     async ({ params, set }) => {
