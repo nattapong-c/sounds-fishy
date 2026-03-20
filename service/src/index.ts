@@ -40,12 +40,15 @@ const app = new Elysia()
             set.status = 404;
             return { error: 'Not found' };
         }
-    })
-    
-    // Start server
-    .listen(PORT, () => {
-        logger.info({ port: PORT }, `Sounds Fishy API server running on http://localhost:${PORT}`);
     });
+
+// Store server instance globally for pub/sub broadcasting from REST controllers
+const server = app.listen(PORT, () => {
+    logger.info({ port: PORT }, `Sounds Fishy API server running on http://localhost:${PORT}`);
+});
+
+// Make server available globally for broadcasting
+(global as any).elysiaServer = server;
 
 export type AppRouter = typeof app;
 

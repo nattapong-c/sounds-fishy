@@ -7,16 +7,18 @@
     --foreground: #171717;
 }
 
-@media (prefers-color-scheme: dark) {
-    :root {
-        --background: #0a0a0a;
-        --foreground: #ededed;
-    }
-}
-
 body {
     color: var(--foreground);
     background: var(--background);
+}
+
+/* Input text color fix */
+input::placeholder {
+    color: #9ca3af; /* gray-400 */
+}
+
+input {
+    color: #1f2937; /* gray-800 - dark and readable */
 }
 
 /* Animations */

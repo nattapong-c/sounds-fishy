@@ -13,16 +13,18 @@ export interface IPlayer {
     inGameRole?: 'guesser' | 'blueFish' | 'redFish' | null;
 }
 
+export type PlayerType = IPlayer;
+
 const PlayerSchema = new Schema<IPlayer>({
     id: { type: String, required: true },
     name: { type: String, required: true },
     deviceId: { type: String, required: true },
     isAdmin: { type: Boolean, default: false },
     isOnline: { type: Boolean, default: false },
-    inGameRole: { 
-        type: String, 
+    inGameRole: {
+        type: String,
         enum: ['guesser', 'blueFish', 'redFish'],
-        default: null 
+        default: null
     }
 }, { _id: false });
 
@@ -37,8 +39,8 @@ export interface IRoom extends Document {
     lastGuesserId?: string | null;
     question?: string | null;
     correctAnswer?: string | null;
-    scores?: Map<string, { 
-        totalPoints: number; 
+    scores?: Map<string, {
+        totalPoints: number;
         tempPoints: number;
         roundsAsGuesser: number;
         roundsAsBlueFish: number;
@@ -48,34 +50,34 @@ export interface IRoom extends Document {
     updatedAt: Date;
 }
 
-const RoomSchema = new Schema<IRoom>({
-    roomId: { 
-        type: String, 
-        required: true, 
+export const RoomSchema = new Schema<IRoom>({
+    roomId: {
+        type: String,
+        required: true,
         unique: true,
         uppercase: true,
-        trim: true 
+        trim: true
     },
-    status: { 
-        type: String, 
+    status: {
+        type: String,
         enum: ['lobby', 'playing', 'guessing', 'round_end', 'completed'],
-        default: 'lobby' 
+        default: 'lobby'
     },
-    players: { 
-        type: [PlayerSchema], 
-        default: [] 
+    players: {
+        type: [PlayerSchema],
+        default: []
     },
-    lastGuesserId: { 
-        type: String, 
-        default: null 
+    lastGuesserId: {
+        type: String,
+        default: null
     },
-    question: { 
-        type: String, 
-        default: null 
+    question: {
+        type: String,
+        default: null
     },
-    correctAnswer: { 
-        type: String, 
-        default: null 
+    correctAnswer: {
+        type: String,
+        default: null
     },
     scores: {
         type: Map,

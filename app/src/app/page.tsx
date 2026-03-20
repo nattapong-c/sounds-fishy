@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { roomAPI } from '@/lib/api';
+import { api } from '@/lib/api';
 
 export default function Home() {
     const router = useRouter();
@@ -15,7 +15,7 @@ export default function Home() {
         setError(null);
 
         try {
-            const response = await roomAPI.create();
+            const response = await api.rooms.create();
             const roomId = response.roomId;
 
             if (roomId) {
@@ -100,11 +100,11 @@ export default function Home() {
                                 placeholder="ENTER ROOM ID"
                                 value={joinRoomId}
                                 onChange={(e) => setJoinRoomId(e.target.value.toUpperCase())}
-                                className="w-full border-2 border-gray-200 focus:border-blue-500 rounded-xl p-4 text-center text-lg tracking-widest outline-none transition-colors"
+                                className="w-full border-2 border-gray-300 focus:border-blue-500 rounded-xl p-4 text-center text-lg tracking-widest outline-none transition-colors text-gray-900 font-medium"
                                 maxLength={6}
                                 autoComplete="off"
                             />
-                            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-xs">
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-xs">
                                 {joinRoomId.length}/6
                             </div>
                         </div>

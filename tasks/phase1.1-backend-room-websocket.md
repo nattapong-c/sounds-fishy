@@ -102,33 +102,44 @@ Backend foundation for room lifecycle management: create rooms, join/rejoin with
   - **Completed:** 2026-03-20
   - **Files:** `service/src/models/room.ts`, `service/src/lib/db.ts`, `service/src/lib/logger.ts`
   - **Notes:** Created Mongoose schema with roomId, players array, indexes. Added DB connection utility.
+    - Exported RoomSchema and PlayerType for controller validation
+    - Added toJSON() method for Map conversion
+    - Fixed duplicate index warning (removed explicit roomId index)
 
 - [x] **T2. Backend: Create Room API Endpoint**
   - **Completed:** 2026-03-20
   - **Files:** `service/src/controllers/room-controller.ts`
   - **Notes:** POST /rooms endpoint with 6-char roomId generation.
+    - Updated to use Elysia route grouping pattern
+    - Type validation with t.Object schemas
 
 - [x] **T3. Backend: Join Room API Endpoint**
-  - **Completed:** 2026-03-20
+  - **Completed:** 2026-03-20 (Updated 2026-03-20)
   - **Files:** `service/src/controllers/room-controller.ts`
   - **Notes:** Handles new players and reconnections, first player is admin, max 8 players.
+    - Aligned with Outsider reference pattern
+    - Proper type validation for params and body
 
 - [x] **T4. Backend: Leave Room API Endpoint**
   - **Completed:** 2026-03-20
   - **Files:** `service/src/controllers/room-controller.ts`
   - **Notes:** Removes player, reassigns admin, deletes room if empty.
+    - Updated to match reference implementation
 
 - [x] **T5. Backend: WebSocket Connection Handler**
   - **Completed:** 2026-03-20 (Updated 2026-03-20)
   - **Files:** `service/src/controllers/ws-controller.ts`, `service/src/index.ts`
-  - **Notes:** WebSocket at /ws/rooms/:roomId, pub/sub pattern, marks online/offline. 
-    Updated to use Elysia WS with prefix pattern, query validation (deviceId), proper message parsing.
+  - **Notes:** WebSocket at /ws/rooms/:roomId, pub/sub pattern, marks online/offline.
+    - Updated to use Elysia WS with prefix pattern, query validation (deviceId)
+    - Server instance stored globally for pub/sub broadcasting
+    - Proper message parsing and error handling
 
 - [x] **T6. Backend: WebSocket Admin Actions**
   - **Completed:** 2026-03-20 (Updated 2026-03-20)
   - **Files:** `service/src/controllers/ws-controller.ts`
   - **Notes:** kick_player and start_game (stub) with admin validation.
-    Aligned with Outsider reference: admin actions in message handler, Phase 2 stubs for submit_guess.
+    - Aligned with Outsider reference: admin actions in message handler
+    - Phase 2 stubs for submit_guess
 
 ## Dependencies
 
@@ -156,9 +167,19 @@ T1 ──→ T2 ──→ T3 ──→ T4
 - No timers needed - players proceed at their own pace
 - start_game is a stub for now (no game logic in Phase 1.1)
 - **Reference:** `docs/room-page-flow.md` for WebSocket events and room state flow
-- **Bug Fixes:**
-  - CORS import: Changed from `import { cors } from 'elysia'` to `import { cors } from '@elysiajs/cors'`
-  - Added `@elysiajs/cors` package to service dependencies
+
+### Code Quality Updates
+- **Controller Pattern:** Updated to Elysia route grouping with prefix
+- **Type Validation:** Using t.Object for params and body validation
+- **Response Types:** Removed complex Mongoose types from validation
+- **Server Instance:** Stored globally for pub/sub broadcasting
+
+### Bug Fixes
+- CORS import: Changed from `import { cors } from 'elysia'` to `import { cors } from '@elysiajs/cors'`
+- Added `@elysiajs/cors` package to service dependencies
+- Duplicate index warning: Removed explicit `index({ roomId: 1 })` (unique: true handles it)
+- Text visibility: Fixed input and player list text colors (gray-900)
+- Player list updates: Broadcasting on join via REST API
 
 ## Testing Checklist
 

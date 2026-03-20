@@ -3,7 +3,7 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
 import { useDeviceId } from '@/hooks/useDeviceId';
-import { roomAPI } from '@/lib/api';
+import { api } from '@/lib/api';
 
 export default function RoomPage() {
     const { roomId } = useParams() as { roomId: string };
@@ -63,7 +63,7 @@ export default function RoomPage() {
         if (!nickname.trim() || !deviceId) return;
 
         try {
-            const response = await roomAPI.join(roomId, nickname, deviceId);
+            const response = await api.rooms.join(roomId, nickname, deviceId);
             setRoomState(response.room);
             setHasJoined(true);
             connectWebSocket();
@@ -78,7 +78,7 @@ export default function RoomPage() {
 
         const checkExistingSession = async () => {
             try {
-                const response = await roomAPI.get(roomId);
+                const response = await api.rooms.get(roomId);
                 const room = response.room;
                 
                 if (!room) return;
@@ -119,7 +119,7 @@ export default function RoomPage() {
     const handleLeaveRoom = async () => {
         if (!deviceId || !roomId) return;
         try {
-            await roomAPI.leave(roomId, deviceId);
+            await api.rooms.leave(roomId, deviceId);
             router.push('/');
         } catch (error: any) {
             alert(`Failed to leave room: ${error.message}`);
@@ -188,7 +188,7 @@ export default function RoomPage() {
                     )}
                     <form onSubmit={handleJoin} className="flex flex-col gap-6">
                         <div>
-                            <label className="block text-gray-500 mb-2 tracking-wider uppercase text-sm">
+                            <label className="block text-gray-700 mb-2 tracking-wider uppercase text-sm font-medium">
                                 Nickname
                             </label>
                             <input
@@ -196,7 +196,7 @@ export default function RoomPage() {
                                 placeholder="Enter your name"
                                 value={nickname}
                                 onChange={(e) => setNickname(e.target.value)}
-                                className="w-full border-2 border-gray-200 focus:border-blue-500 rounded-xl p-4 text-center text-xl outline-none transition-colors"
+                                className="w-full border-2 border-gray-300 focus:border-blue-500 rounded-xl p-4 text-center text-xl outline-none transition-colors text-gray-900 font-medium"
                                 maxLength={15}
                                 autoFocus
                             />
@@ -273,7 +273,7 @@ export default function RoomPage() {
                                         {player.isAdmin && (
                                             <span title="Admin" className="text-yellow-500">👑</span>
                                         )}
-                                        <span className="font-medium truncate">{player.name}</span>
+                                        <span className="font-medium truncate text-gray-900">{player.name}</span>
                                         {player.deviceId === deviceId && (
                                             <span className="text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">
                                                 You

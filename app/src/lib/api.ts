@@ -1,79 +1,81 @@
-/**
- * API Client for Sounds Fishy backend
- * Uses fetch wrapper for type-safe API calls
- */
+import axios, { AxiosInstance, AxiosError } from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-/**
- * Generic fetch wrapper with error handling
- */
-async function fetchApi<T>(
-    endpoint: string,
-    options?: RequestInit
-): Promise<T> {
-    const url = `${API_BASE_URL}${endpoint}`;
-    
-    const response = await fetch(url, {
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options?.headers,
-        },
-    });
-    
-    const data = await response.json();
-    
-    if (!response.ok) {
-        throw new Error(data.error || `HTTP ${response.status}`);
+// Create axios instance with default config
+const apiClient: AxiosInstance = axios.create({
+    baseURL: API_URL,
+    headers: {
+        'Content-Type': 'application/json',
+    },
+    timeout: 10000, // 10 second timeout
+});
+
+// Request interceptor for logging
+apiClient.interceptors.request.use(
+    (config) => {
+        // Add auth token here in the future if needed
+        return config;
+    },
+    (error) => {
+        return Promise.reject(error);
     }
-    
-    return data;
-}
+);
 
-/**
- * Room API methods
- */
-export const roomAPI = {
-    /**
-     * Create a new room
-     * POST /rooms
-     */
-    create: async () => {
-        return fetchApi<{ roomId: string }>('/rooms', {
-            method: 'POST',
-        });
-    },
+// Response interceptor for error handling
+apiClient.interceptors.response.use(
+    (response) => response,
+    (error: AxiosError) => {
+        // Handle common errors
+        if (error.response) {
+            // Server responded with error status
+            console.error('API Error:', error.response.status, error.response.data);
+        } else if (error.request) {
+            // Request made but no response
+            console.error('API Error: No response received', error.request);
+        } else {
+            // Something else happened
+            console.error('API Error:', error.message);
+        }
+        return Promise.reject(error);
+    }
+);
 
-    /**
-     * Get room info
-     * GET /rooms/:roomId
-     */
-    get: async (roomId: string) => {
-        return fetchApi<{ room: any }>(`/rooms/${roomId}`);
-    },
+// API Methods
+export const api = {
+    // Room endpoints
+    rooms: {
+        // Create a new room
+        create: async () => {
+            const response = await apiClient.post('/rooms');
+            return response.data;
+        },
 
-    /**
-     * Join a room
-     * POST /rooms/:roomId/join
-     */
-    join: async (roomId: string, name: string, deviceId: string) => {
-        return fetchApi<{ room: any }>(`/rooms/${roomId}/join`, {
-            method: 'POST',
-            body: JSON.stringify({ name, deviceId }),
-        });
-    },
+        // Get room details
+        get: async (roomId: string) => {
+            const response = await apiClient.get(`/rooms/${roomId}`);
+            return response.data;
+        },
 
-    /**
-     * Leave a room
-     * POST /rooms/:roomId/leave
-     */
-    leave: async (roomId: string, deviceId: string) => {
-        return fetchApi<{ success: boolean }>(`/rooms/${roomId}/leave`, {
-            method: 'POST',
-            body: JSON.stringify({ deviceId }),
-        });
+        // Join a room
+        join: async (roomId: string, name: string, deviceId: string) => {
+            const response = await apiClient.post(`/rooms/${roomId}/join`, {
+                name,
+                deviceId,
+            });
+            return response.data;
+        },
+
+        // Leave a room
+        leave: async (roomId: string, deviceId: string) => {
+            const response = await apiClient.post(`/rooms/${roomId}/leave`, {
+                deviceId,
+            });
+            return response.data;
+        },
     },
 };
 
-export { fetchApi };
+// Export types
+export type { AxiosError };
+export { apiClient };

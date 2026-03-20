@@ -119,29 +119,39 @@ Frontend implementation for room lifecycle: home page (create/join), room page w
   - **Notes:** Generates UUID v4, stores in localStorage, persists across sessions.
 
 - [x] **T8. Frontend: API Client Setup**
-  - **Completed:** 2026-03-20
+  - **Completed:** 2026-03-20 (Updated 2026-03-20)
   - **Files:** `app/src/lib/api.ts`
-  - **Notes:** Fetch wrapper with create, get, join, leave methods.
+  - **Notes:** Updated to use axios with interceptors pattern (aligned with reference).
+    - Axios instance with baseURL, headers, timeout
+    - Request interceptor for future auth
+    - Response interceptor for error handling
+    - Installed axios package
 
 - [x] **T9. Frontend: Home Page (Create/Join)**
   - **Completed:** 2026-03-20
   - **Files:** `app/src/app/page.tsx`
   - **Notes:** Create button, join form, error handling, mobile responsive.
+    - Fixed text visibility (text-gray-900, darker borders)
 
 - [x] **T10. Frontend: Room Page - Join Flow**
   - **Completed:** 2026-03-20
   - **Files:** `app/src/app/[roomId]/page.tsx`
   - **Notes:** Nickname form, auto-reconnect, WebSocket connection after join.
+    - Fixed text visibility in inputs and labels
+    - Enhanced WebSocket message type handling
 
 - [x] **T11. Frontend: WebSocket Integration**
   - **Completed:** 2026-03-20
   - **Files:** `app/src/app/[roomId]/page.tsx`
   - **Notes:** Auto-detect ws/wss, room_state_update handler, cleanup on unmount.
+    - Message type switch statement for better handling
+    - Error message display from WebSocket
 
 - [x] **T12. Frontend: Room Page - Lobby UI**
   - **Completed:** 2026-03-20
   - **Files:** `app/src/app/[roomId]/page.tsx`
   - **Notes:** Player list, admin badge, kick button, copy room ID, start game.
+    - Player names now dark text (text-gray-900) for readability
 
 - [x] **T13. Frontend: Handle Kicked/Removed Players**
   - **Completed:** 2026-03-20
@@ -175,6 +185,18 @@ T7 ──→ T8 ──→ T9 ──→ T10 ──→ T11 ──→ T12 ──→
 - No timers needed - players proceed at their own pace
 - **Reference:** `docs/homepage-flow.md` for home page UI and user flow
 - **Reference:** `docs/room-page-flow.md` for room page UI, WebSocket integration, and state management
+
+### Code Quality Updates
+- **API Client:** Updated to axios with interceptors (aligned with reference)
+- **Error Handling:** Response interceptor for centralized error logging
+- **Type Safety:** Axios types exported for reuse
+
+### Bug Fixes
+- Text visibility: Input text now dark gray-900 (was too light)
+- Player names: Dark text for readability
+- Input borders: Darker gray-300 for better visibility
+- Labels: Darker gray-700 for readability
+- WebSocket messages: Enhanced type handling with switch statement
 
 ## Testing Checklist
 
