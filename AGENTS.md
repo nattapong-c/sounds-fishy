@@ -1,324 +1,408 @@
-# Project: FishyBusiness Digital (Face-to-Face Edition)
+# Sounds Fishy
 
-## 1. Project Overview
-A digital "Secret Screen" companion app for the "Sounds Fishy" board game. Designed for players in the same physical location, using mobile devices as private controllers while the main interaction happens verbally.
+A web application adaptation of the physical board game "Sounds Fishy" - a storytelling and bluffing game for 4-8 players.
 
-**Design Theme:** Modern & Minimal with playful, funny animations 🐟
+## Project Overview
 
-**Repository:** `git@github.com:nattapong-c/sounds-fishy.git`
+**Sounds Fishy** is a mobile-first web application that digitizes the board game experience. The game focuses on storytelling, lying, and deduction where players must identify who is telling the truth and who is bluffing.
 
----
+## Game Rules
 
-## 2. Tech Stack
-- **Frontend:** Next.js (App Router), Tailwind CSS, Playwright (Testing), Vercel (Hosting)
-- **Backend:** Bun, ElysiaJS (with built-in WebSocket), MongoDB (Persistence), Render (Hosting)
-- **State Management:** MongoDB (No Redis, No In-memory storage) - Single source of truth
-- **AI Integration:** OpenAI-compatible LLM API (configurable API key, model, base URL)
-- **Real-time Communication:** ElysiaJS WebSocket (Pub/Sub pattern, query parameter authentication)
+### Setup
+- **Players**: 4-8 persons
+- **Roles**: 
+  - 1 Guesser
+  - 1 Blue Fish
+  - Remaining players are Red Fish
 
----
+### Gameplay Flow
 
-## 3. Game Rules (The Logic)
+1. **Question Phase**: The system provides a question to all players
+2. **Answer Distribution**:
+   - **Blue Fish**: Receives the factual/true answer
+   - **Red Fish**: Receive a fake answer with lie suggestions for storytelling
+   - **Guesser**: Only sees the question (no answer)
+3. **Storytelling**: Each player (except Guesser) tells their story based on their answer
+4. **Deduction**: The Guesser must identify which players have fake answers
 
-### Roles & Information
-| Role | Hidden From Player | Visible To Player |
-| :--- | :--- | :--- |
-| **The Guesser** | The Correct Answer | The Question + Elimination Panel |
-| **The Big Fish** | None | The Question + The Correct Answer |
-| **Red Herrings** | The Correct Answer | The Question + AI Bluff Assistant |
+### Scoring System
 
-### Scoring System (Risk vs. Reward)
-- **Eliminate a Red Herring:** Guesser earns points (1st = 1pt, 2nd = 2pts, 3rd = 3pts, etc.).
-- **The "Bank" Option:** After any successful elimination, the Guesser can stop and keep their points.
-- **The "Bust" (Catching the Big Fish):** - If the Guesser picks the **Big Fish** by mistake, they lose **ALL** points for that round.
-    - The Big Fish and all remaining (non-eliminated) Red Herrings receive points instead.
+- **Correct Red Fish elimination**: Guesser earns 1 temporary point (accumulative)
+- **Wrong guess (selecting Blue Fish)**: Guesser loses all accumulated points (reset to 0)
+- **All Red Fish eliminated**: 
+  - Guesser keeps all accumulated points
+  - Blue Fish earns 1 point
+- **Guesser loses all points**: Remaining Red Fish each earn 1 point
+- **Role Rotation**: After each round, assign a new Guesser
+- **Game End**: After every player has been Guesser once, the game ends and final scores are displayed
 
----
+## 🛠 Tech Stack
 
-## 4. Detailed Game Flow (Step-by-Step)
+| Layer | Technology | Hosting |
+|-------|------------|---------|
+| Runtime | Bun | - |
+| Frontend | Next.js 16 (App Router) + React 19 + TypeScript | Vercel |
+| Backend | ElysiaJS + TypeScript | Render |
+| Database | MongoDB (Mongoose ODM) | MongoDB Atlas |
+| Styling | TailwindCSS v4 | - |
+| Type Safety | @elysiajs/eden (Eden Treaty) | - |
+| Logging | Pino | - |
 
-### Phase 1: Lobby & Setup
-1. **Host** creates a room (stored in MongoDB).
-2. **Players** join via Room Code. Names are stored in MongoDB.
-3. **Start:** Server randomly assigns 1 Guesser, 1 Big Fish, and the rest as Red Herrings.
-4. **AI Generation:** Server uses OpenAI-compatible LLM to generate:
-   - Question prompt for the round
-   - Correct answer (for Big Fish)
-   - Set of believable bluff answers (for Red Herrings to reference)
-
-**Routing:** `/room/{roomCode}` (dual-purpose: join form or room view)
-
-### Phase 2: The Briefing (Secret Info)
-1. Server emits `start_round` via WebSocket with unique payloads.
-2. **Guesser Screen:** Displays the Question. They read it out loud.
-3. **Others Screen:** Displays "Tap to Reveal" button.
-    - **Big Fish** sees the question + the correct answer (AI-generated).
-    - **Red Herrings** see the question + AI-generated bluff suggestions + optional "Generate More Lies" button (AI-powered).
-4. All players (except Guesser) click "Ready" when they have their answer prepared.
-
-### Phase 3: The Pitch (Verbal)
-1. Each player (except Guesser) gives their answer verbally to the room.
-2. The Guesser watches for stutters, eye contact, and "fishy" logic.
-
-### Phase 4: Elimination (Interactive)
-1. Guesser selects a player on their phone to eliminate.
-2. **WebSocket Broadcast:** Server checks the role and sends `reveal_result` to everyone.
-3. **Visual Result:** Every phone vibrates/animates showing if it was a "Red Herring" or "Big Fish."
-4. **Logic Loop:**
-    - If **Red Herring**: Guesser chooses to **"Continue"** (higher points) or **"Bank"** (end round).
-    - If **Big Fish**: Round ends immediately (Guesser Busted).
-
-### Phase 5: Round Summary
-1. Update MongoDB with new scores.
-2. Show Leaderboard.
-3. Rotate roles for the next round.
-
----
-
-## 📂 Current Project Structure
-
-**Simplified Architecture (Inline Components):**
+## 📂 Project Structure
 
 ```
 sounds-fishy/
-├── app/                        # Frontend (Next.js)
+├── AGENTS.md                       # This file
+├── README.md                       # User-facing documentation
+├── app/                            # Frontend (Next.js)
 │   ├── src/
-│   │   ├── app/
-│   │   │   ├── page.tsx        # Home page (inline components)
-│   │   │   └── room/[roomCode]/
-│   │   │       └── page.tsx    # Lobby/Briefing (inline components)
-│   │   └── hooks/
-│   │       └── useDeviceId.ts  # Device identity (shared)
+│   │   ├── app/                    # Next.js App Router
+│   │   │   ├── [roomId]/           # Dynamic room route
+│   │   │   ├── globals.css         # Global styles (mobile-first)
+│   │   │   ├── layout.tsx          # Root layout
+│   │   │   └── page.tsx            # Home page (create/join room)
+│   │   ├── components/             # React components
+│   │   ├── hooks/                  # Custom React hooks
+│   │   │   └── useDeviceId.ts      # Persistent identity via localStorage
+│   │   └── lib/                    # Utilities
+│   │       └── api.ts              # Eden Treaty client
 │   ├── package.json
-│   └── .env.local
+│   ├── tsconfig.json
+│   └── next.config.ts
 │
-├── service/                    # Backend (ElysiaJS)
+├── service/                        # Backend (ElysiaJS)
 │   ├── src/
 │   │   ├── controllers/
-│   │   │   ├── room-controller.ts
-│   │   │   └── ws-controller.ts
+│   │   │   ├── room-controller.ts  # REST endpoints (create, join, leave)
+│   │   │   └── ws-controller.ts    # WebSocket handlers (game logic)
 │   │   ├── models/
-│   │   │   └── game-room.ts
-│   │   ├── services/
-│   │   │   ├── room-service.ts
-│   │   │   └── game-service.ts
+│   │   │   └── room.ts             # Mongoose schema + Elysia validation
+│   │   ├── game/                   # Game logic and state management
+│   │   │   ├── roles.ts            # Role assignment (Guesser, Blue Fish, Red Fish)
+│   │   │   ├── scoring.ts          # Scoring system
+│   │   │   └── questions.ts        # Question/answer database
 │   │   ├── lib/
-│   │   │   ├── database.ts
-│   │   │   └── logger.ts
-│   │   └── index.ts
+│   │   │   ├── db.ts               # MongoDB connection
+│   │   │   └── logger.ts           # Pino logger
+│   │   └── index.ts                # Elysia entry point
+│   ├── .env                        # Environment variables (MongoDB URI)
 │   ├── package.json
-│   └── .env
+│   └── tsconfig.json
 │
-├── tasks/                      # Task documentation
-├── reports/                    # Research
-└── README.md                   # Main documentation
+└── tests/                          # Test files
 ```
 
-**Note:** All UI components (Button, Input, PlayerCard, etc.) and hooks (useBriefing) are now inline in page files for simpler architecture.
+## 🚀 Building and Running
 
----
-
-## 5. Architecture Patterns (from Outsider Project)
-
-### 5.1 WebSocket Connection Pattern
-
-**Query Parameter Authentication:**
-```typescript
-// Frontend connects with deviceId (persistent identity)
-ws://localhost:3001/ws?roomCode=ABC123&deviceId=xyz-789
-
-// Backend validates in Elysia
-.ws('/ws', {
-  query: t.Object({
-    roomCode: t.String(),
-    deviceId: t.Optional(t.String()),
-  }),
-  // ... handlers
-})
-```
-
-**Connection Lifecycle:**
-1. **Open:** Subscribe to room channel, mark player as online, broadcast `room_updated`
-2. **Message:** Route to handler based on `message.type`
-3. **Close:** Mark player as offline (don't remove), broadcast `room_updated`
-
-### 5.2 Room-Based Pub/Sub
-
-```typescript
-// Backend broadcasting pattern
-ws.subscribe(roomCode);  // Subscribe to room channel
-ws.publish(roomCode, {   // Broadcast to all in room
-  type: 'player_joined',
-  data: { deviceId, playerName, playerCount }
-});
-```
-
-### 5.3 Player Identity via deviceId (localStorage)
-
-```typescript
-// Frontend: Generate deviceId once on first join
-const deviceId = localStorage.getItem('deviceId') || crypto.randomUUID();
-localStorage.setItem('deviceId', deviceId);
-
-// Frontend: Retrieve on page load (survives refresh/restart)
-const deviceId = localStorage.getItem('deviceId');
-
-// Backend: Same deviceId = same player (auto-reconnection)
-const player = room.players.find(p => p.deviceId === deviceId);
-// If found: update isOnline = true (reconnection)
-// If not found: create new player entry
-```
-
-**Key Points:**
-- `deviceId` is generated once and stored in `localStorage`
-- `deviceId` survives page refresh and browser restart
-- No user accounts needed
-- Reconnection is automatic with same `deviceId`
-- Backend matches players by `deviceId`, not by session
-- Same `deviceId` in same room = same player (preserves role, score, etc.)
-
-### 5.4 MongoDB as Single Source of Truth
-
-**No Redis, No In-Memory State:**
-- All game state stored in MongoDB
-- WebSocket connections are transient
-- Player reconnection restores state from database
-- `isOnline` flag tracks current connection status
-
-### 5.5 Dual Schema Approach
-
-```typescript
-// Elysia schema for API validation
-body: t.Object({
-  playerName: t.String(),
-  deviceId: t.Optional(t.String()),
-})
-
-// Mongoose schema for database persistence
-const playerSchema = new Schema({
-  deviceId: String,  // Persistent identity
-  name: String,
-  isHost: Boolean,
-  // ...
-});
-```
-
----
-
-## 6. Key Implementation Details
-
-### 6.1 Room Creation Flow
-
-```
-POST /api/rooms
-  ↓
-Generate room code → Create host player (with deviceId) → Save to MongoDB
-  ↓
-Return {roomId, roomCode, deviceId} → Store in localStorage → Navigate to /room/[roomCode]
-```
-
-### 6.2 Join Room Flow
-
-```
-POST /api/rooms/:code/join
-  ↓
-Find room → Check if deviceId exists (reconnect) or create new player → Save to MongoDB
-  ↓
-Return {deviceId, roomCode} → Store in localStorage
-  ↓
-WebSocket reconnects with deviceId → Backend broadcasts room_updated
-  ↓
-Frontend receives update → UI refresh → Player sees themselves in room
-```
-
-### 6.3 WebSocket Reconnection Strategy
-
-```typescript
-// useSocket.ts - Exponential backoff
-const MAX_RECONNECT_ATTEMPTS = 5;
-const delays: [1000, 2000, 4000, 8000, 10000]; // Cap at 10s
-
-ws.onclose = () => {
-  if (attempt < MAX_RECONNECT_ATTEMPTS) {
-    setTimeout(() => connect(), delays[attempt]);
-    attempt++;
-  }
-};
-```
-
-### 6.4 Player Disconnection vs Leave
-
-**Disconnect (Refresh/Close Tab):**
-- Mark `isOnline = false`
-- Set `lastSeen = Date.now()`
-- Keep player in room array (deviceId preserved)
-- Broadcast `player_disconnected`
-- On reconnect: same deviceId restores player state
-
-**Explicit Leave:**
-- Remove from room array
-- Transfer host if needed
-- Delete room if empty
-- Broadcast `player_left`
-
----
-
-## 7. Development Workflow
-
-### Available Commands
-
-**Frontend Only:**
-```bash
-cd app && bun run dev    # Start Next.js dev server (port 3000)
-```
-
-**Backend Only:**
-```bash
-cd service && bun run dev  # Start ElysiaJS dev server (port 3001)
-```
-
-**Full-Stack:**
-- Run both servers in separate terminals
-- Frontend: `http://localhost:3000`
-- Backend API: `http://localhost:3001`
-- WebSocket: `ws://localhost:3001/ws`
+### Prerequisites
+- [Bun](https://bun.sh/) runtime installed
+- MongoDB instance (local or Atlas)
 
 ### Environment Setup
 
-**Backend `.env`:**
+**Backend** (`service/.env`):
 ```bash
-MONGODB_URI=mongodb://localhost:27017/sounds-fishy
+MONGO_URI=mongodb://localhost:27017/sounds-fishy
+# Or MongoDB Atlas connection string
 PORT=3001
-FRONTEND_URL=http://localhost:3000
-OPENAI_API_KEY=your-key-here
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-4o-mini
+CORS_ORIGIN=http://localhost:4444
 ```
 
-**Frontend `.env.local`:**
+**Frontend** (create `app/.env.local` if needed):
 ```bash
 NEXT_PUBLIC_API_URL=http://localhost:3001
 NEXT_PUBLIC_WS_URL=ws://localhost:3001
 ```
 
+### Development Commands
+
+**Backend:**
+```bash
+cd service
+bun run dev          # Start ElysiaJS dev server on port 3001
+```
+
+**Frontend:**
+```bash
+cd app
+bun run dev          # Start Next.js dev server on port 4444
+bun run build        # Build for production
+bun run lint         # Run ESLint
+```
+
+### Testing
+```bash
+cd service
+bun test             # Run backend tests
+
+cd app
+bun run lint         # Lint check
+```
+
+## 🎮 Key Architecture Concepts
+
+### Identity Management
+- No user accounts - uses `deviceId` (UUID stored in `localStorage`) for persistent identity
+- Players reconnect automatically if they refresh or lose connection
+- `isOnline` flag tracks current connection status
+
+### WebSocket Communication
+- Connection: `ws://localhost:3001/ws/rooms/:roomId?deviceId=:deviceId`
+- All game state updates broadcast via `room_state_update` event
+- Events are JSON-stringified payloads with `type` field
+
+### Room States
+```typescript
+'lobby'               → Waiting for players, admin configures game
+'playing'             → Storytelling phase active (no timer)
+'guessing'            → Guesser making selections (no timer)
+'round_end'           → Round results displayed
+'completed'           → Game over, final scores displayed
+```
+
+### Key WebSocket Events
+
+**Client → Server:**
+- `start_game` (admin): Begin game with role assignment
+- `kick_player` (admin): Remove player
+- `end_round` (admin): Reset to lobby
+- `submit_guess` (guesser): Select player with fake answer
+- `reveal_roles` (host): End game, show all roles
+
+**Server → Client:**
+- `room_state_update`: General state broadcast
+- `game_started`: Game begins, roles assigned
+- `guess_submitted`: Guesser made a selection
+- `round_ended`: Round results with scoring
+- `roles_revealed`: Game over, all roles shown
+
+## 🎨 UI/UX Theme
+
+**Minimal, Clean & Funny:**
+
+- **Minimal**: Simple layouts, generous whitespace, focused content
+- **Clean**: Clear typography, consistent spacing, no visual clutter
+- **Funny**: Playful illustrations, witty microcopy, humorous animations
+
+### Design Principles
+
+1. **Less is More** - Remove unnecessary elements, keep only what's essential
+2. **Clear Hierarchy** - Use size, weight, and color to guide attention
+3. **Playful Touches** - Add humor through:
+   - Fish-themed illustrations/icons
+   - Witty button labels and error messages
+   - Subtle animations (fish swimming, bubbles)
+   - Funny role reveal animations
+
+### Color Palette
+
+- **Primary**: Ocean Blue (`#0077B6`) - main actions, links
+- **Secondary**: Coral (`#FF6B6B`) - Red Fish, warnings
+- **Accent**: Gold (`#FFD93D`) - Blue Fish, highlights
+- **Background**: Light/Clean (`#F8F9FA` or white)
+- **Text**: Dark Gray (`#2D3436`) - readable, not harsh black
+
+### Typography
+
+- **Font**: System fonts (San Francisco, Inter, or similar clean sans-serif)
+- **Headings**: Bold, playful
+- **Body**: Regular weight, comfortable reading size (16px+)
+
+### Visual Elements
+
+- **Icons**: Simple line icons with fish/sea theme
+- **Illustrations**: Minimal fish characters with expressions
+- **Cards**: Subtle shadows, rounded corners (8-12px)
+- **Buttons**: Touch-friendly (44px min), clear states
+
+### Mobile-First
+
+- Touch-friendly tap targets (minimum 44px)
+- Thumb-friendly navigation
+- Responsive breakpoints for tablets/desktops
+
+## 📝 Coding Conventions
+
+### TypeScript Naming
+- **Variables/Functions**: `camelCase` (`gameSession`, `handleGuess`)
+- **Components/Classes**: `PascalCase` (`GameCard`, `RoomPage`)
+- **Constants**: `UPPER_SNAKE_CASE` (`MAX_PLAYERS`, `API_BASE_URL`)
+- **Files**: `kebab-case` (`room-controller.ts`, `useDeviceId.ts`)
+
+### Backend Patterns
+- Elysia `t` schemas for validation + Eden type inference
+- Mongoose for MongoDB persistence
+- Pino for structured logging
+- WebSocket messages validated before processing
+
+### Frontend Patterns
+- Functional components with hooks
+- Custom hooks for reusable logic (`useDeviceId`)
+- Eden Treaty for type-safe API calls
+- TailwindCSS for all styling
+
+## 🔧 Key Files Reference
+
+| File | Purpose |
+|------|---------|
+| `service/src/index.ts` | Elysia app entry, CORS, route registration |
+| `service/src/models/room.ts` | Mongoose schema + Elysia validation schemas |
+| `service/src/controllers/ws-controller.ts` | Core game logic, WebSocket handlers |
+| `service/src/game/roles.ts` | Role assignment logic (Guesser, Blue Fish, Red Fish) |
+| `service/src/game/scoring.ts` | Scoring system implementation |
+| `app/src/app/[roomId]/page.tsx` | Main room/game page, WebSocket client |
+| `app/src/lib/api.ts` | Eden Treaty client initialization |
+| `app/src/hooks/useDeviceId.ts` | Persistent identity management |
+
+## 📋 Development Phases
+
+### Phase 1 - Core Game Loop
+- Room creation/joining
+- Admin controls (kick, start game)
+- Role assignment (Guesser, Blue Fish, Red Fish)
+- Question/answer distribution
+- Storytelling phase (no timer - players proceed at their own pace)
+
+### Phase 2 - Scoring & Rounds
+- Guesser selection mechanism
+- Scoring system implementation
+- Round rotation (new Guesser)
+- Round results display
+
+### Phase 3 - Game End & Polish
+- Final scoring and results
+- Game history
+- Mobile UI polish
+- "Play Again" functionality
+
+## 🐛 Common Issues & Solutions
+
+**WebSocket not connecting:**
+- Ensure backend is running on port 3001
+- Check `NEXT_PUBLIC_WS_URL` environment variable
+- Vercel hosting requires external WebSocket URL (Render backend)
+
+**MongoDB connection error:**
+- Verify `MONGO_URI` in `service/.env`
+- Ensure MongoDB is running or Atlas connection is valid
+
+**Type errors with Eden:**
+- Backend `AppRouter` type must be exported from `service/src/index.ts`
+- Frontend imports type: `import type { AppRouter } from '../../../service/src/index'`
+
 ---
 
-## 8. Testing Strategy
+## 📚 Rooms & WebSocket Flow
 
-### Backend Testing
-- Unit tests for services (room-service, game-service, ai-service)
-- Integration tests for WebSocket events
-- Mock MongoDB with in-memory database
+This project follows the same room management and WebSocket communication patterns as the Outsider project. See the detailed flow documentation for:
 
-### Frontend Testing
-- Component tests (Button, Input, PlayerCard)
-- Hook tests (useSocket, useRoom)
-- E2E tests with Playwright (lobby flow, game flow)
+- Room lifecycle (create, join, leave)
+- WebSocket connection management
+- Reconnection strategy with `deviceId`
+- Message handling patterns
+- State synchronization
+- Edge cases & error handling
 
----
+### Key Differences from Outsider
 
-## 9. References
+| Aspect | Outsider | Sounds Fishy |
+|--------|----------|--------------|
+| Timers | Quiz/Discussion/Voting timers | No timers - players proceed at own pace |
+| Roles | Host, Insider, Common | Guesser, Blue Fish, Red Fish |
+| Win Condition | Word guessed + Insider identified | Guesser finds all Red Fish |
+| Scoring | Binary win/lose | Accumulative points system |
+| Game Flow | Quiz → Showdown → Voting | Storytelling → Guessing → Round End |
 
-- **Implementation Plan:** `IMPLEMENTATION_PLAN.md`
-- **Outsider Study:** `reports/outsider-study.md`
-- **Repository:** `git@github.com:nattapong-c/sounds-fishy.git`
+### Adapted WebSocket Events
+
+**Client → Server:**
+- `start_game` (admin): Begin game, assign roles, get question/answers
+- `kick_player` (admin): Remove player from room
+- `end_round` (admin): End current round, rotate Guesser role
+- `submit_guess` (guesser): Select a player suspected as Red Fish
+- `end_game` (admin): End full game, show final scores
+
+**Server → Client:**
+- `room_state_update`: General state broadcast (player join/leave, status changes)
+- `game_started`: Roles assigned, question/answers distributed
+- `guess_submitted`: Guesser made a selection, scoring updated
+- `round_ended`: Round complete, new Guesser assigned
+- `game_ended`: All rounds complete, final scores displayed
+
+### Room States (Adapted)
+
+```typescript
+'lobby'       → Waiting for players, admin configures game
+'playing'     → Storytelling phase - players see question/answers
+'guessing'    → Guesser selects suspected Red Fish players
+'round_end'   → Round results shown, preparing next round
+'completed'   → All rounds done, final scores displayed
+```
+
+### Game State Flow
+
+```
+┌─────────┐    ┌──────────┐    ┌───────────┐    ┌──────────┐    ┌───────────┐
+│  lobby  │───►│ playing  │───►│ guessing  │───►│ round_end│───►│ completed │
+└─────────┘    └──────────┘    └───────────┘    └──────────┘    └───────────┘
+     ▲                                               │
+     │                                               │ (more rounds)
+     └───────────────────────────────────────────────┘
+```
+
+### Role Assignment Flow
+
+```typescript
+// Backend: Role assignment on game start
+const players = [...room.players];
+const shuffled = players.sort(() => 0.5 - Math.random());
+
+// Determine next Guesser (rotate through all players)
+const previousGuesserId = room.lastGuesserId;
+let guesserIndex = 0;
+if (previousGuesserId) {
+    const prevIndex = players.findIndex(p => p.id === previousGuesserId);
+    guesserIndex = (prevIndex + 1) % players.length;
+}
+
+// Assign roles
+shuffled[guesserIndex].inGameRole = 'guesser';
+shuffled[(guesserIndex + 1) % players.length].inGameRole = 'blueFish';
+for (let i = 0; i < players.length; i++) {
+    if (i !== guesserIndex && i !== (guesserIndex + 1) % players.length) {
+        shuffled[i].inGameRole = 'redFish';
+    }
+}
+
+room.lastGuesserId = shuffled[guesserIndex].id;
+```
+
+### Scoring Flow
+
+```typescript
+interface GameScore {
+    playerId: string;
+    playerName: string;
+    totalPoints: number;
+    roundsAsGuesser: number;
+    roundsAsBlueFish: number;
+    roundsAsRedFish: number;
+}
+
+// Scoring logic
+if (guesser.selectedPlayer.inGameRole === 'redFish') {
+    // Correct guess
+    guesserScore.tempPoints += 1;
+    if (allRedFishEliminated) {
+        guesserScore.totalPoints += guesserScore.tempPoints;
+        blueFishScore.totalPoints += 1;
+    }
+} else if (guesser.selectedPlayer.inGameRole === 'blueFish') {
+    // Wrong guess - reset temp points
+    guesserScore.tempPoints = 0;
+    // Remaining Red Fish get points
+    remainingRedFish.forEach(player => {
+        playerScore.totalPoints += 1;
+    });
+}
+```
