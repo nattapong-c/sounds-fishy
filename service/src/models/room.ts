@@ -91,9 +91,6 @@ const RoomSchema = new Schema<IRoom>({
     timestamps: true
 });
 
-// Index for fast roomId lookups
-RoomSchema.index({ roomId: 1 });
-
 // Index for deviceId lookups (for reconnection)
 RoomSchema.index({ 'players.deviceId': 1 });
 
@@ -111,15 +108,3 @@ RoomSchema.methods.toJSON = function() {
  * Room model for MongoDB
  */
 export const RoomModel = mongoose.model<IRoom>('Room', RoomSchema);
-
-/**
- * Helper function to convert room document to plain object with toJSON
- */
-export function roomToJSON(room: IRoom): any {
-    const roomObj = room.toObject();
-    // Convert scores Map to plain object
-    if (roomObj.scores) {
-        roomObj.scores = Object.fromEntries(roomObj.scores);
-    }
-    return roomObj;
-}
