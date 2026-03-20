@@ -203,6 +203,8 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                     player.isOnline = false;
                     await room.save();
                 }
+              
+                ws.publish(`room:${roomId}`, JSON.stringify({ type: 'room_state_update', room: room.toJSON() }));
             }
         }
     });
