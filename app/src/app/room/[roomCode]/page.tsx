@@ -130,6 +130,12 @@ function useRoom(roomCode: string, deviceId?: string) {
       const message = JSON.parse(event.data);
       if (message.type === 'room_updated') {
         setRoom({ ...message.data, players: [...message.data.players] });
+      } else if (message.type === 'game_started') {
+        // Update room status to briefing when game starts
+        setRoom((prevRoom) => {
+          if (!prevRoom) return prevRoom;
+          return { ...prevRoom, status: 'briefing' as const };
+        });
       } else if (message.type === 'start_round') {
         // Handle start round if needed
       }

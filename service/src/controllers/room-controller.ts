@@ -107,7 +107,7 @@ export const roomController = new Elysia({ prefix: '/api' })
           data: {
             deviceId: player.deviceId,
             roomCode: roomCode.toUpperCase(),
-            rejoined: player.isReady !== undefined // If player had state, they reconnected
+            rejoined: true // Player already exists in room
           }
         };
       } catch (error) {
