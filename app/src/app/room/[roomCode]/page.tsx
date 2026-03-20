@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useDeviceId } from '@/hooks/useDeviceId';
 import axios from 'axios';
@@ -77,8 +77,7 @@ function useBriefing(roomCode: string, deviceId?: string, room: IGameRoom | null
 // WebSocket Hook
 function useWebSocket(roomCode?: string, deviceId?: string) {
   const [isConnected, setIsConnected] = useState(false);
-  const wsRef = useState<WebSocket | null>(null)[0];
-  const setWsRef = useState<WebSocket | null>(null)[1];
+  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     if (!roomCode || !deviceId) return;
@@ -90,7 +89,7 @@ function useWebSocket(roomCode?: string, deviceId?: string) {
     ws.onclose = () => setIsConnected(false);
     ws.onerror = () => console.error('WebSocket error');
 
-    setWsRef(ws);
+    wsRef.current = ws;
 
     return () => {
       ws.close();
@@ -98,11 +97,10 @@ function useWebSocket(roomCode?: string, deviceId?: string) {
   }, [roomCode, deviceId]);
 
   const sendMessage = useCallback((type: string, data: any) => {
-    const ws = wsRef;
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type, data }));
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type, data }));
     }
-  }, [wsRef]);
+  }, []);
 
   return { isConnected, sendMessage };
 }
