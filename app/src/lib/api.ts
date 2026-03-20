@@ -1,34 +1,79 @@
-import axios from 'axios';
+/**
+ * API Client for Sounds Fishy backend
+ * Uses fetch wrapper for type-safe API calls
+ */
 
-// Create API client instance
-const apiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-// Request interceptor (optional - for logging or adding auth)
-apiClient.interceptors.request.use(
-  (config) => {
-    // Add logging in development
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[API] ${config.method?.toUpperCase()} ${config.url}`);
+/**
+ * Generic fetch wrapper with error handling
+ */
+async function fetchApi<T>(
+    endpoint: string,
+    options?: RequestInit
+): Promise<T> {
+    const url = `${API_BASE_URL}${endpoint}`;
+    
+    const response = await fetch(url, {
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options?.headers,
+        },
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+        throw new Error(data.error || `HTTP ${response.status}`);
     }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
+    
+    return data;
+}
 
-// Response interceptor (optional - for error handling)
-apiClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    console.error('[API Error]', error.response?.data || error.message);
-    return Promise.reject(error);
-  }
-);
+/**
+ * Room API methods
+ */
+export const roomAPI = {
+    /**
+     * Create a new room
+     * POST /rooms
+     */
+    create: async () => {
+        return fetchApi<{ roomId: string }>('/rooms', {
+            method: 'POST',
+        });
+    },
 
-export default apiClient;
+    /**
+     * Get room info
+     * GET /rooms/:roomId
+     */
+    get: async (roomId: string) => {
+        return fetchApi<{ room: any }>(`/rooms/${roomId}`);
+    },
+
+    /**
+     * Join a room
+     * POST /rooms/:roomId/join
+     */
+    join: async (roomId: string, name: string, deviceId: string) => {
+        return fetchApi<{ room: any }>(`/rooms/${roomId}/join`, {
+            method: 'POST',
+            body: JSON.stringify({ name, deviceId }),
+        });
+    },
+
+    /**
+     * Leave a room
+     * POST /rooms/:roomId/leave
+     */
+    leave: async (roomId: string, deviceId: string) => {
+        return fetchApi<{ success: boolean }>(`/rooms/${roomId}/leave`, {
+            method: 'POST',
+            body: JSON.stringify({ deviceId }),
+        });
+    },
+};
+
+export { fetchApi };

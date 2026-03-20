@@ -1,35 +1,52 @@
 import { Elysia } from 'elysia';
 import { cors } from '@elysiajs/cors';
-import { connectDB } from './lib/database';
 import { roomController } from './controllers/room-controller';
 import { wsController } from './controllers/ws-controller';
+import { connectDB } from './lib/db';
 import { logger } from './lib/logger';
 
-// Initialize Database connection
-connectDB();
+// Connect to MongoDB
+connectDB().catch((err) => {
+    logger.error({ err }, 'Failed to connect to MongoDB');
+    process.exit(1);
+});
+
+const PORT = process.env.PORT || 3001;
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:4444';
 
 const app = new Elysia()
-  .use(
-    cors({
-      origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-      credentials: true,
-      allowedHeaders: ['Content-Type', 'Authorization'],
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    }),
-  )
-  .use(wsController)
-  .use(roomController)
-  .get('/', () => '🐟 Sounds Fishy API is running!')
-  .get('/health', () => ({ status: 'ok', timestamp: new Date().toISOString() }))
-  .listen(process.env.PORT || 3001);
-
-logger.info({
-  hostname: app.server?.hostname,
-  port: app.server?.port,
-}, '🐟 Sounds Fishy API started');
-
-logger.info({
-  websocket: `ws://${app.server?.hostname}:${app.server?.port}/ws`,
-}, '🔌 WebSocket endpoint ready');
+    // CORS configuration
+    .use(
+        cors({
+            origin: CORS_ORIGIN,
+            credentials: true,
+            allowedHeaders: ['Content-Type'],
+            methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+        })
+    )
+    
+    // Health check
+    .get('/health', () => ({ status: 'ok', timestamp: new Date().toISOString() }))
+    
+    // Room routes
+    .use(roomController)
+    
+    // WebSocket routes
+    .use(wsController)
+    
+    // 404 handler
+    .onError(({ set, code }) => {
+        if (code === 'NOT_FOUND') {
+            set.status = 404;
+            return { error: 'Not found' };
+        }
+    })
+    
+    // Start server
+    .listen(PORT, () => {
+        logger.info({ port: PORT }, `Sounds Fishy API server running on http://localhost:${PORT}`);
+    });
 
 export type AppRouter = typeof app;
+
+export default app;

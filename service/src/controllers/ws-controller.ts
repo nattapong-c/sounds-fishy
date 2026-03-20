@@ -1,502 +1,217 @@
 import { Elysia, t } from 'elysia';
-import GameRoom, { IPlayer } from '../models/game-room';
-import { roomService, type LeaveRoomResult } from '../services/room-service';
-import { gameService } from '../services/game-service';
+import { RoomModel } from '../models/room';
 import { logger } from '../lib/logger';
 
 /**
- * WebSocket message types
+ * WebSocket Controller
+ * Real-time communication for room updates
+ * 
+ * Note: Phase 1.1 - No timers, players proceed at their own pace
  */
-interface WSMessage {
-  type: string;
-  data: any;
-}
 
-interface JoinRoomData {
-  roomCode: string;
-  deviceId: string;
-}
+export const wsController = new Elysia({ prefix: '/ws/rooms' })
+    .ws('/:roomId', {
+        body: t.Any(),
+        query: t.Object({ deviceId: t.String() }),
+        async open(ws) {
+            const { roomId } = ws.data.params;
+            const { deviceId } = ws.data.query;
 
-interface LeaveRoomData {
-  roomCode: string;
-  deviceId: string;
-}
+            ws.subscribe(`room:${roomId}`);
+            logger.info({ roomId, deviceId }, 'WebSocket connected');
 
-interface StartGameData {
-  roomCode: string;
-}
+            const room = await RoomModel.findOne({ roomId });
+            if (room) {
+                const player = room.players.find(p => p.deviceId === deviceId);
+                if (player) {
+                    player.isOnline = true;
+                    await room.save();
 
-interface GenerateLieData {
-  roomCode: string;
-  deviceId: string;
-}
+                    const updatePayload = JSON.stringify({ 
+                        type: 'room_state_update', 
+                        room: room.toJSON() 
+                    });
+                    ws.publish(`room:${roomId}`, updatePayload);
+                    ws.send(updatePayload);
+                }
+            }
+        },
+        async message(ws, message: any) {
+            const { roomId } = ws.data.params;
+            const { deviceId } = ws.data.query;
 
-/**
- * Map to track player WebSocket connections by room
- */
-const roomConnections = new Map<string, Set<any>>();
+            let parsedMessage = message;
+            if (typeof message === 'string') {
+                try {
+                    parsedMessage = JSON.parse(message);
+                } catch(e) { 
+                    logger.warn({ roomId, deviceId }, 'Invalid WebSocket message format');
+                    return; 
+                }
+            }
 
-/**
- * Map to track which players have been announced in each room
- */
-const announcedPlayers = new Map<string, Set<string>>(); // roomCode -> Set of deviceIds
-
-/**
- * Handle WebSocket messages
- */
-async function handleMessage(ws: any, message: WSMessage) {
-  const { type, data } = message;
-
-  try {
-    switch (type) {
-      case 'join_room':
-        await handleJoinRoom(ws, data as JoinRoomData);
-        break;
-
-      case 'leave_room':
-        await handleLeaveRoom(ws, data as LeaveRoomData);
-        break;
-
-      case 'start_game':
-        await handleStartGame(ws, data as StartGameData);
-        break;
-
-      case 'generate_lie':
-        await handleGenerateLie(ws, data as GenerateLieData);
-        break;
-
-      default:
-        logger.warn({ type }, 'Unknown WS message type');
-        ws.send({ type: 'error', data: { code: 'UNKNOWN_MESSAGE', message: 'Unknown message type' } });
-    }
-  } catch (error) {
-    logger.error({ type, error: error instanceof Error ? error.message : 'Unknown error' }, 'WS error handling message');
-    ws.send({
-      type: 'error',
-      data: {
-        code: 'WS_ERROR',
-        message: error instanceof Error ? error.message : 'Failed to process message'
-      }
-    });
-  }
-}
-
-/**
- * Handle join_room event
- */
-async function handleJoinRoom(ws: any, data: JoinRoomData) {
-  const { roomCode, deviceId } = data;
-  const normalizedRoomCode = roomCode.toUpperCase();
-
-  const room = await GameRoom.findOne({ roomCode: normalizedRoomCode });
-
-  if (!room) {
-    ws.send({ type: 'error', data: { code: 'ROOM_NOT_FOUND', message: 'Room not found' } });
-    return;
-  }
-
-  // Store device ID and room code in websocket data
-  ws.data = { ...ws.data, deviceId, roomCode: normalizedRoomCode };
-
-  // Subscribe to room channel for pub/sub
-  ws.subscribe(normalizedRoomCode);
-
-  // Track connection
-  if (!roomConnections.has(normalizedRoomCode)) {
-    roomConnections.set(normalizedRoomCode, new Set());
-  }
-  roomConnections.get(normalizedRoomCode)!.add(ws);
-
-  // Get the player from the room
-  const player = room.players.find(p => p.deviceId === deviceId);
-
-  if (player) {
-    // Check if player has already been announced
-    const hasBeenAnnounced = announcedPlayers.get(normalizedRoomCode)?.has(deviceId) || false;
-
-    // Broadcast player_joined ONLY if not already announced
-    if (!hasBeenAnnounced) {
-      ws.publish(normalizedRoomCode, {
-        type: 'player_joined',
-        data: {
-          deviceId: player.deviceId,
-          playerName: player.name,
-          playerCount: room.players.length
-        }
-      });
-
-      // Track that this player has been announced
-      if (!announcedPlayers.has(normalizedRoomCode)) {
-        announcedPlayers.set(normalizedRoomCode, new Set());
-      }
-      announcedPlayers.get(normalizedRoomCode)!.add(deviceId);
-    }
-
-    // Broadcast room_updated to ALL players in the room (critical for host's player list to update)
-    ws.publish(normalizedRoomCode, {
-      type: 'room_updated',
-      data: room
-    });
-
-    // CRITICAL FIX: If room is already in briefing status, send start_round to late-joiner (only once)
-    if (room.status === 'briefing' && player.inGameRole) {
-      // Check if player has already received start_round (track in session)
-      const hasReceivedStartRound = ws.data?.hasReceivedStartRound;
-      
-      if (!hasReceivedStartRound) {
-        logger.info({ roomCode: normalizedRoomCode, deviceId, role: player.inGameRole }, 'Late joiner detected - sending start_round');
-
-        const payload = gameService.getRoleSpecificPayload(player, room);
-        ws.send({
-          type: 'start_round',
-          data: payload
-        });
-
-        // Mark that this player has received start_round
-        ws.data = { ...ws.data, hasReceivedStartRound: true };
-        
-        logger.info({ deviceId, role: player.inGameRole }, 'Sent start_round to late joiner');
-      } else {
-        logger.debug({ deviceId }, 'Player already received start_round, skipping');
-      }
-    } else if (room.status === 'briefing' && !player.inGameRole) {
-      // Player doesn't have a role yet - this shouldn't happen, but log it
-      logger.warn({ roomCode: normalizedRoomCode, deviceId, role: player.inGameRole }, 'Late joiner without role - room status is briefing');
-    }
-  } else {
-    // Player not found in room - send error
-    ws.send({ type: 'error', data: { code: 'PLAYER_NOT_FOUND', message: 'Player not found in room' } });
-  }
-}
-
-/**
- * Handle leave_room event
- */
-async function handleLeaveRoom(ws: any, data: LeaveRoomData) {
-  const { roomCode, deviceId } = data;
-  const normalizedRoomCode = roomCode.toUpperCase();
-
-  // Step 1: Get room state BEFORE removing player
-  const roomBeforeLeave = await GameRoom.findOne({ roomCode: normalizedRoomCode });
-
-  if (!roomBeforeLeave) {
-    ws.send({ type: 'error', data: { code: 'ROOM_NOT_FOUND', message: 'Room not found' } });
-    return;
-  }
-
-  const leavingPlayer = roomBeforeLeave.players.find(p => p.deviceId === deviceId);
-  const isHostLeaving = deviceId === roomBeforeLeave.hostId;
-
-  // Step 2: Remove player from database (handles host transfer and room deletion)
-  const result: LeaveRoomResult = await roomService.leaveRoom(normalizedRoomCode, deviceId);
-
-  // Step 3: Handle based on result
-  if (result.roomDeleted) {
-    // Room was deleted - notify leaving player
-    ws.send({
-      type: 'room_deleted',
-      data: {
-        roomCode: normalizedRoomCode,
-        reason: isHostLeaving ? 'Host left and room was empty' : 'Last player left'
-      }
-    });
-
-    // Unsubscribe and clean up
-    ws.unsubscribe(normalizedRoomCode);
-    const connections = roomConnections.get(normalizedRoomCode);
-    if (connections) {
-      connections.delete(ws);
-    }
-    // Clean up announced players map
-    announcedPlayers.delete(normalizedRoomCode);
-    return;
-  }
-
-  // Step 4: Broadcast to remaining players
-  const roomAfterLeave = await GameRoom.findOne({ roomCode: normalizedRoomCode });
-
-  if (!roomAfterLeave) {
-    ws.send({ type: 'error', data: { code: 'ROOM_NOT_FOUND', message: 'Room not found after leave' } });
-    ws.unsubscribe(normalizedRoomCode);
-    const connections = roomConnections.get(normalizedRoomCode);
-    if (connections) {
-      connections.delete(ws);
-    }
-    return;
-  }
-
-  // If host transferred, broadcast host_transferred event
-  if (result.newHostId) {
-    const newHost = roomAfterLeave.players.find(p => p.deviceId === result.newHostId);
-    ws.publish(normalizedRoomCode, {
-      type: 'host_transferred',
-      data: {
-        newHostId: result.newHostId,
-        newHostName: newHost?.name || 'Player'
-      }
-    });
-  }
-
-  // Broadcast player_left to all remaining players
-  ws.publish(normalizedRoomCode, {
-    type: 'player_left',
-    data: {
-      deviceId,
-      playerName: leavingPlayer?.name || 'Player',
-      remainingCount: roomAfterLeave.players.length,
-      newHostId: result.newHostId || undefined
-    }
-  });
-
-  // Broadcast room_updated to all remaining players
-  ws.publish(normalizedRoomCode, {
-    type: 'room_updated',
-    data: roomAfterLeave
-  });
-
-  // Send confirmation to leaving player
-  ws.send({
-    type: 'left_room',
-    data: {
-      roomCode: normalizedRoomCode,
-      deviceId
-    }
-  });
-
-  // Unsubscribe and clean up (after broadcasting)
-  ws.unsubscribe(normalizedRoomCode);
-  const connections = roomConnections.get(normalizedRoomCode);
-  if (connections) {
-    connections.delete(ws);
-  }
-  // Remove from announced players
-  const announced = announcedPlayers.get(normalizedRoomCode);
-  if (announced) {
-    announced.delete(deviceId);
-    if (announced.size === 0) {
-      announcedPlayers.delete(normalizedRoomCode);
-    }
-  }
-}
-
-/**
- * Handle start_game event
- */
-async function handleStartGame(ws: any, data: StartGameData) {
-  const { roomCode } = data;
-  const normalizedRoomCode = roomCode.toUpperCase();
-
-  try {
-    // Start guessing phase (generates question, assigns roles)
-    const { room } = await gameService.startGame(normalizedRoomCode);
-
-    // Broadcast game started with guessing status
-    ws.publish(normalizedRoomCode, {
-      type: 'game_started',
-      data: {
-        roomCode: normalizedRoomCode,
-        status: room.status  // 'guessing'
-      }
-    });
-
-    // Send role-specific payloads to ALL players in the room via broadcast
-    // Each player will receive their own role-specific data
-    const connections = roomConnections.get(normalizedRoomCode);
-    if (connections) {
-      for (const connection of connections) {
-        const deviceId = connection.data?.deviceId;
-        const player = room.players.find(p => p.deviceId === deviceId);
-
-        if (player) {
-          const payload = gameService.getRoleSpecificPayload(player, room);
-          // Send directly to this specific connection
-          connection.send({
-            type: 'start_round',
-            data: payload
-          });
-        }
-      }
-    }
-    
-    // Also broadcast to ensure all players receive it (fallback)
-    ws.publish(normalizedRoomCode, {
-      type: 'start_round_broadcast',
-      data: { message: 'Game started, check your role' }
-    });
-
-    logger.info({ roomCode: normalizedRoomCode }, 'Game started');
-  } catch (error) {
-    logger.error({ error: error instanceof Error ? error.message : 'Unknown error' }, 'Error in start_game');
-    ws.send({
-      type: 'error',
-      data: {
-        code: 'START_ERROR',
-        message: error instanceof Error ? error.message : 'Failed to start game'
-      }
-    });
-  }
-}
-
-/**
- * Handle generate_lie event (for Red Herring players)
- */
-async function handleGenerateLie(ws: any, data: GenerateLieData) {
-  const { roomCode, deviceId } = data;
-  const normalizedRoomCode = roomCode.toUpperCase();
-
-  try {
-    const result = await gameService.generateLieForPlayer(normalizedRoomCode, deviceId);
-
-    // Send lie suggestion to the requesting player
-    ws.send({
-      type: 'lie_generated',
-      data: {
-        lieSuggestion: result.lieSuggestion,
-        usedFallback: result.usedFallback
-      }
-    });
-
-    logger.info({ playerId: deviceId, roomCode: normalizedRoomCode }, 'Lie generated');
-  } catch (error) {
-    logger.error({ error: error instanceof Error ? error.message : 'Unknown error' }, 'Error in generate_lie');
-    ws.send({
-      type: 'error',
-      data: {
-        code: 'LIE_ERROR',
-        message: error instanceof Error ? error.message : 'Failed to generate lie'
-      }
-    });
-  }
-}
-
-/**
- * WebSocket controller for real-time game communication
- * Pattern from Outsider project: Query parameter authentication
- */
-export const wsController = new Elysia()
-  .ws('/ws', {
-    // Query parameter validation (from Outsider pattern)
-    query: t.Object({
-      roomCode: t.String(),
-      deviceId: t.Optional(t.String()),
-    }),
-
-    body: t.Object({
-      type: t.String(),
-      data: t.Any(),
-    }),
-
-    open(ws) {
-      const { roomCode, deviceId } = ws.data.query;
-      const normalizedRoomCode = roomCode.toUpperCase();
-
-      logger.info({ roomCode: normalizedRoomCode, deviceId }, '✅ WS connected');
-
-      // Subscribe to room channel for pub/sub (use normalized room code without prefix)
-      ws.subscribe(normalizedRoomCode);
-
-      // Mark player as online and broadcast reconnection
-      if (deviceId) {
-        // Mark player as online in database
-        GameRoom.findOne({ roomCode: normalizedRoomCode })
-          .then(async (room) => {
-            if (!room) return;
+            const room = await RoomModel.findOne({ roomId });
+            if (!room) {
+                logger.warn({ roomId }, 'Room not found for WebSocket message');
+                return;
+            }
 
             const player = room.players.find(p => p.deviceId === deviceId);
-            if (player) {
-              // Always mark player as online
-              player.isOnline = true;
-              player.lastSeen = new Date();
-              await room.save();
+            if (!player) {
+                logger.warn({ roomId, deviceId }, 'Player not found in room');
+                return;
+            }
 
-              // Broadcast player_reconnected to all players (including self)
-              ws.publish(normalizedRoomCode, JSON.stringify({
-                type: 'player_reconnected',
-                data: {
-                  deviceId,
-                  playerName: player.name,
-                  isOnline: true
+            // Admin Actions
+            if (player.isAdmin) {
+                /**
+                 * Start Game (Phase 2 stub)
+                 * For Phase 1.1: Just validates admin and logs
+                 */
+                if (parsedMessage.type === 'start_game') {
+                    if (!parsedMessage.hostPlayerId) {
+                        logger.warn({ roomId, deviceId }, 'Admin tried to start game without selecting host');
+                        ws.send(JSON.stringify({ 
+                            type: 'error', 
+                            message: 'Host selection required' 
+                        }));
+                        return;
+                    }
+
+                    const hostPlayer = room.players.find(p => p.id === parsedMessage.hostPlayerId);
+                    if (!hostPlayer) {
+                        logger.warn({ roomId, deviceId, hostPlayerId: parsedMessage.hostPlayerId }, 'Selected host not found');
+                        ws.send(JSON.stringify({ 
+                            type: 'error', 
+                            message: 'Host player not found' 
+                        }));
+                        return;
+                    }
+
+                    // Validate minimum players (4 for Sounds Fishy)
+                    if (room.players.length < 4) {
+                        ws.send(JSON.stringify({ 
+                            type: 'error', 
+                            message: 'Need at least 4 players to start' 
+                        }));
+                        return;
+                    }
+
+                    logger.info({ 
+                        roomId, 
+                        deviceId, 
+                        hostPlayerId: parsedMessage.hostPlayerId,
+                        difficulty: parsedMessage.difficulty,
+                        language: parsedMessage.language
+                    }, 'Admin started game (Phase 2 stub)');
+
+                    // Phase 2: Will assign roles and distribute questions
+                    // For now, just acknowledge
+                    ws.send(JSON.stringify({
+                        type: 'game_started',
+                        room: room.toJSON(),
+                        message: 'Game logic will be implemented in Phase 2'
+                    }));
                 }
-              }));
 
-              // Broadcast updated room state to all players
-              ws.publish(normalizedRoomCode, JSON.stringify({
-                type: 'room_updated',
-                data: room
-              }));
+                /**
+                 * Update Timer Config (Phase 2 - stub for now)
+                 * Sounds Fishy has no timers, but keeping for future compatibility
+                 */
+                else if (parsedMessage.type === 'update_timer_config') {
+                    logger.info({ roomId, deviceId, config: parsedMessage.config }, 'Timer config update (not used in Sounds Fishy)');
+                    // No-op for Sounds Fishy (no timers)
+                }
+
+                /**
+                 * End Round
+                 * Reset room to lobby state
+                 */
+                else if (parsedMessage.type === 'end_round') {
+                    logger.info({ roomId, deviceId }, 'Admin ended the round');
+                    
+                    room.status = 'lobby';
+                    room.players.forEach(p => {
+                        p.inGameRole = null;
+                    });
+                    room.question = null;
+                    room.correctAnswer = null;
+                    await room.save();
+
+                    const updatePayload = JSON.stringify({ 
+                        type: 'room_state_update', 
+                        room: room.toJSON() 
+                    });
+                    ws.publish(`room:${roomId}`, updatePayload);
+                    ws.send(updatePayload);
+                }
+
+                /**
+                 * Kick Player
+                 * Remove player from room
+                 */
+                else if (parsedMessage.type === 'kick_player') {
+                    const targetPlayerId = parsedMessage.targetPlayerId;
+                    
+                    // Cannot kick admin
+                    const targetPlayer = room.players.find(p => p.id === targetPlayerId);
+                    if (targetPlayer?.isAdmin) {
+                        ws.send(JSON.stringify({ 
+                            type: 'error', 
+                            message: 'Cannot kick admin' 
+                        }));
+                        return;
+                    }
+
+                    logger.info({ 
+                        roomId, 
+                        adminDeviceId: deviceId, 
+                        targetPlayerId 
+                    }, 'Admin kicked player');
+                    
+                    room.players = room.players.filter(p => p.id !== targetPlayerId);
+                    await room.save();
+                    
+                    const updatePayload = JSON.stringify({ 
+                        type: 'room_state_update', 
+                        room: room.toJSON() 
+                    });
+                    ws.publish(`room:${roomId}`, updatePayload);
+                    ws.send(updatePayload);
+                }
             }
-          })
-          .catch((err) => {
-            logger.error({ error: err instanceof Error ? err.message : 'Unknown error' }, 'Error marking player as online');
-          });
-      }
 
-      // Send initial connection confirmation
-      ws.send(JSON.stringify({
-        type: 'connected',
-        data: { roomCode: normalizedRoomCode, deviceId }
-      }));
-    },
-    close(ws) {
-      const { roomCode, deviceId } = ws.data.query;
-      const normalizedRoomCode = roomCode.toUpperCase();
+            /**
+             * Submit Guess (Phase 2 - stub)
+             * Guesser selects suspected Red Fish
+             */
+            if (parsedMessage.type === 'submit_guess') {
+                // Phase 2: Will implement scoring logic
+                logger.info({ roomId, deviceId, guess: parsedMessage.targetPlayerId }, 'Guess submitted (Phase 2 stub)');
+                ws.send(JSON.stringify({
+                    type: 'guess_submitted',
+                    message: 'Scoring will be implemented in Phase 2'
+                }));
+            }
+        },
+        async close(ws) {
+            const { roomId } = ws.data.params;
+            const { deviceId } = ws.data.query;
 
-      logger.info({ roomCode: normalizedRoomCode, deviceId }, '❌ WS disconnected');
+            logger.info({ roomId, deviceId }, 'WebSocket disconnected');
 
-      // Handle disconnection - mark as offline, DON'T remove from room
-      if (deviceId && normalizedRoomCode) {
-        // Remove from connections tracking
-        const connections = roomConnections.get(normalizedRoomCode);
-        if (connections) {
-          connections.delete(ws);
+            const room = await RoomModel.findOne({ roomId });
+            if (room) {
+                const player = room.players.find(p => p.deviceId === deviceId);
+                if (player) {
+                    player.isOnline = false;
+                    await room.save();
+                    
+                    ws.publish(`room:${roomId}`, JSON.stringify({ 
+                        type: 'room_state_update', 
+                        room: room.toJSON() 
+                    }));
+                }
+            }
         }
-
-        // Get room state before marking disconnected
-        GameRoom.findOne({ roomCode: normalizedRoomCode })
-          .then(async (roomBeforeLeave) => {
-            if (!roomBeforeLeave) return;
-
-            // CRITICAL BUG FIX: Pass isDisconnect=true to prevent room deletion
-            // Mark player as disconnected (not removed from room)
-            const result = await roomService.leaveRoom(normalizedRoomCode, deviceId, true); // true = isDisconnect
-
-            // Handle room deletion case
-            if (result.roomDeleted) {
-              logger.info({ roomCode: normalizedRoomCode }, 'Room deleted due to host disconnection');
-              return;
-            }
-
-            // Get updated room state
-            const roomAfterLeave = await GameRoom.findOne({ roomCode: normalizedRoomCode });
-
-            if (!roomAfterLeave) return;
-
-            // Broadcast player_disconnected (not player_left)
-            ws.publish(normalizedRoomCode, JSON.stringify({
-              type: 'player_disconnected',
-              data: {
-                deviceId,
-                playerName: roomBeforeLeave.players.find(p => p.deviceId === deviceId)?.name || 'Player',
-                isOnline: false,
-                lastSeen: new Date().toISOString()
-              }
-            }));
-
-            // Broadcast room_updated to remaining players
-            ws.publish(normalizedRoomCode, JSON.stringify({
-              type: 'room_updated',
-              data: roomAfterLeave
-            }));
-          })
-          .catch((err) => {
-            logger.error({ error: err instanceof Error ? err.message : 'Unknown error' }, 'Error handling player disconnect');
-          });
-      }
-
-      // Unsubscribe after broadcasting (player still in room, just offline)
-      ws.unsubscribe(normalizedRoomCode);
-    },
-    message(ws, message: WSMessage) {
-      handleMessage(ws, message);
-    },
-  });
+    });
