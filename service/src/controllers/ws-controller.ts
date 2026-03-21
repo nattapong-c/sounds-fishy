@@ -1,6 +1,10 @@
 import { Elysia, t } from 'elysia';
 import { RoomModel } from '../models/room';
 import { logger } from '../lib/logger';
+import { getRandomQuestion } from '../services/question-bank-service';
+import { assignRoles } from '../game/roles';
+
+type GameRole = 'guesser' | 'blueFish' | 'redFish';
 
 /**
  * WebSocket Controller
@@ -79,48 +83,117 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
             // Admin Actions
             if (player.isAdmin) {
                 /**
-                 * Start Game (Phase 2 stub)
+                 * Start Game
+                 * Assign roles, get question, distribute to players
                  */
                 if (parsedMessage.type === 'start_game') {
-                    if (!parsedMessage.hostPlayerId) {
-                        logger.warn({ roomId, deviceId }, 'Admin tried to start game without selecting host');
-                        ws.send(JSON.stringify({ 
-                            type: 'error', 
-                            message: 'Host selection required' 
-                        }));
-                        return;
-                    }
-
-                    const hostPlayer = room.players.find(p => p.id === parsedMessage.hostPlayerId);
-                    if (!hostPlayer) {
-                        logger.warn({ roomId, deviceId, hostPlayerId: parsedMessage.hostPlayerId }, 'Selected host not found');
-                        ws.send(JSON.stringify({ 
-                            type: 'error', 
-                            message: 'Host player not found' 
-                        }));
-                        return;
-                    }
-
                     // Validate minimum players (4 for Sounds Fishy)
                     if (room.players.length < 4) {
-                        ws.send(JSON.stringify({ 
-                            type: 'error', 
-                            message: 'Need at least 4 players to start' 
+                        ws.send(JSON.stringify({
+                            type: 'error',
+                            message: 'Need at least 4 players to start'
                         }));
                         return;
                     }
 
-                    logger.info({ 
-                        roomId, 
-                        deviceId, 
-                        hostPlayerId: parsedMessage.hostPlayerId
-                    }, 'Admin started game (Phase 2 stub)');
+                    logger.info({ roomId, deviceId }, 'Admin started game');
 
-                    ws.send(JSON.stringify({
+                    // Assign roles
+                    const roleAssignment = assignRoles(room.players, room.lastGuesserId);
+                    
+                    // Update player roles in room
+                    room.players.forEach(p => {
+                        const role = roleAssignment.assignments.get(p.id);
+                        if (role) {
+                            p.inGameRole = role;
+                        }
+                    });
+
+                    // Get random question
+                    const questionData = await getRandomQuestion('english', 'medium');
+                    if (!questionData) {
+                        ws.send(JSON.stringify({
+                            type: 'error',
+                            message: 'Failed to get question'
+                        }));
+                        return;
+                    }
+
+                    // Update room state
+                    room.status = 'playing';
+                    room.question = questionData.question;
+                    room.correctAnswer = questionData.correctAnswer;
+                    room.lastGuesserId = roleAssignment.guesserId;
+                    room.currentRound = room.currentRound || 1;
+                    room.eliminatedPlayers = [];
+                    room.currentTempPoints = 0;
+
+                    // Distribute fake answers to Red Fish (each gets unique one)
+                    const fakeAnswersDistribution = new Map<string, string>();
+                    const shuffledFakes = [...questionData.fakeAnswers].sort(() => 0.5 - Math.random());
+                    roleAssignment.redFishIds.forEach((playerId, index) => {
+                        const fakeAnswer = shuffledFakes[index % shuffledFakes.length];
+                        fakeAnswersDistribution.set(playerId, fakeAnswer);
+                    });
+                    room.fakeAnswersDistribution = fakeAnswersDistribution;
+
+                    await room.save();
+                    logger.info({
+                        roomId,
+                        guesserId: roleAssignment.guesserId,
+                        blueFishId: roleAssignment.blueFishId,
+                        redFishCount: roleAssignment.redFishIds.length
+                    }, 'Game started with roles assigned');
+
+                    // Build player-specific data map
+                    const playerDataMap: Record<string, {
+                        role: GameRole;
+                        question: string;
+                        correctAnswer?: string;
+                        fakeAnswer?: string;
+                        lieSuggestion?: string;
+                    }> = {};
+
+                    // Guesser data
+                    playerDataMap[roleAssignment.guesserId] = {
+                        role: 'guesser',
+                        question: room.question!
+                    };
+
+                    // Blue Fish data
+                    playerDataMap[roleAssignment.blueFishId] = {
+                        role: 'blueFish',
+                        question: room.question!,
+                        correctAnswer: room.correctAnswer!
+                    };
+
+                    // Red Fish data (reuse shuffledFakes from above)
+                    roleAssignment.redFishIds.forEach((playerId, index) => {
+                        const fakeAnswer = shuffledFakes[index % shuffledFakes.length];
+                        const lieSuggestion = questionData.fakeAnswers.find(a => a !== fakeAnswer);
+                        playerDataMap[playerId] = {
+                            role: 'redFish',
+                            question: room.question!,
+                            fakeAnswer,
+                            lieSuggestion
+                        };
+                    });
+
+                    // Broadcast single message with all player data
+                    // Each client will extract their own data based on deviceId
+                    const payload = {
                         type: 'game_started',
                         room: room.toJSON(),
-                        message: 'Game logic will be implemented in Phase 2'
-                    }));
+                        playerDataMap // Each player finds their own data
+                    };
+
+                    // Broadcast to all players in the room
+                    ws.publish(`room:${roomId}`, JSON.stringify(payload));
+                    
+                    // Also send directly to ensure admin (who clicked start) receives it
+                    ws.send(JSON.stringify(payload));
+                    
+                    logger.info({ roomId, playerCount: room.players.length }, 'Broadcasted game start to all players');
                 }
 
                 /**

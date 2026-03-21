@@ -37,14 +37,26 @@ export interface IRoom extends Document {
     status: 'lobby' | 'playing' | 'guessing' | 'round_end' | 'completed';
     players: IPlayer[];
     lastGuesserId?: string | null;
+    currentRound?: number;
     question?: string | null;
     correctAnswer?: string | null;
+    fakeAnswersDistribution?: Map<string, string>; // playerId -> fakeAnswer
+    eliminatedPlayers?: string[]; // playerIds already eliminated
+    currentTempPoints?: number; // Guesser's temporary points
     scores?: Map<string, {
         totalPoints: number;
         tempPoints: number;
         roundsAsGuesser: number;
         roundsAsBlueFish: number;
         roundsAsRedFish: number;
+    }>;
+    gameHistory?: Array<{
+        round: number;
+        guesserId: string;
+        blueFishId: string;
+        redFishIds: string[];
+        winner: 'guesser' | 'blueFish' | 'redFish';
+        pointsAwarded: number;
     }>;
     createdAt: Date;
     updatedAt: Date;
@@ -71,6 +83,10 @@ export const RoomSchema = new Schema<IRoom>({
         type: String,
         default: null
     },
+    currentRound: {
+        type: Number,
+        default: 1
+    },
     question: {
         type: String,
         default: null
@@ -78,6 +94,18 @@ export const RoomSchema = new Schema<IRoom>({
     correctAnswer: {
         type: String,
         default: null
+    },
+    fakeAnswersDistribution: {
+        type: Map,
+        of: String
+    },
+    eliminatedPlayers: {
+        type: [String],
+        default: []
+    },
+    currentTempPoints: {
+        type: Number,
+        default: 0
     },
     scores: {
         type: Map,
@@ -88,6 +116,17 @@ export const RoomSchema = new Schema<IRoom>({
             roundsAsBlueFish: { type: Number, default: 0 },
             roundsAsRedFish: { type: Number, default: 0 }
         }, { _id: false })
+    },
+    gameHistory: {
+        type: [{
+            round: Number,
+            guesserId: String,
+            blueFishId: String,
+            redFishIds: [String],
+            winner: { type: String, enum: ['guesser', 'blueFish', 'redFish'] },
+            pointsAwarded: Number
+        }],
+        default: []
     }
 }, {
     timestamps: true

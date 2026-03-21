@@ -4,15 +4,20 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
 import { useDeviceId } from '@/hooks/useDeviceId';
 import { api } from '@/lib/api';
+import { GameRole, GameRoomState } from '@/types/game';
 
 export default function RoomPage() {
     const { roomId } = useParams() as { roomId: string };
     const deviceId = useDeviceId();
     const router = useRouter();
-    
+
     const [nickname, setNickname] = useState('');
     const [hasJoined, setHasJoined] = useState(false);
-    const [roomState, setRoomState] = useState<any>(null);
+    const [roomState, setRoomState] = useState<GameRoomState | null>(null);
+    const [myRole, setMyRole] = useState<GameRole | null>(null);
+    const [myQuestion, setMyQuestion] = useState<string>('');
+    const [myAnswer, setMyAnswer] = useState<string>('');
+    const [myLieSuggestion, setMyLieSuggestion] = useState<string>('');
     const [error, setError] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
     const wsRef = useRef<WebSocket | null>(null);
@@ -41,13 +46,36 @@ export default function RoomPage() {
             try {
                 const message = JSON.parse(event.data);
                 console.log('WebSocket message received:', message.type);
-                
+
                 // Handle different message types
                 switch (message.type) {
                     case 'room_state_update':
-                    case 'game_started':
                     case 'guess_submitted':
                         setRoomState(message.room);
+                        break;
+                    case 'game_started':
+                        // Handle role-specific game start data
+                        setRoomState(message.room);
+                        
+                        // Find current player's ID from room state
+                        const currentPlayer = message.room.players?.find((p: any) => p.deviceId === deviceId);
+                        if (currentPlayer && message.playerDataMap) {
+                            const myData = message.playerDataMap[currentPlayer.id];
+                            if (myData) {
+                                setMyRole(myData.role);
+                                setMyQuestion(myData.question);
+                                if (myData.correctAnswer) {
+                                    setMyAnswer(myData.correctAnswer);
+                                }
+                                if (myData.fakeAnswer) {
+                                    setMyAnswer(myData.fakeAnswer);
+                                }
+                                if (myData.lieSuggestion) {
+                                    setMyLieSuggestion(myData.lieSuggestion);
+                                }
+                                console.log('Game started - My role:', myData.role);
+                            }
+                        }
                         break;
                     case 'error':
                         console.error('WebSocket error:', message.message);
@@ -341,6 +369,82 @@ export default function RoomPage() {
                                 </div>
                             )}
                         </div>
+                    ) : roomState?.status === 'playing' ? (
+                        // Game Started - Show Role-Specific View
+                        <div className="flex-1 flex flex-col">
+                            {myRole === 'guesser' && (
+                                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-8 text-center">
+                                    <div className="text-5xl mb-4">🔍</div>
+                                    <h3 className="text-2xl font-bold text-blue-800 mb-2">You are the GUESSER</h3>
+                                    <p className="text-blue-600 mb-6">Listen to their stories and find the Red Fish!</p>
+                                    
+                                    <div className="bg-white rounded-xl p-6 mb-6 shadow">
+                                        <p className="text-gray-500 text-sm uppercase mb-2">Question</p>
+                                        <p className="text-xl font-bold text-gray-900">{myQuestion}</p>
+                                    </div>
+                                    
+                                    <div className="text-gray-600 text-sm">
+                                        <p>🎯 All other players will tell their story</p>
+                                        <p>🐟 One is telling the truth (Blue Fish)</p>
+                                        <p>🐠 Rest are bluffing (Red Fish)</p>
+                                        <p className="mt-2 font-semibold">Find the Red Fish!</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {myRole === 'blueFish' && (
+                                <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-2xl p-8 text-center">
+                                    <div className="text-5xl mb-4">🐟</div>
+                                    <h3 className="text-2xl font-bold text-yellow-800 mb-2">You are the BLUE FISH</h3>
+                                    <p className="text-yellow-600 mb-6">Tell the TRUE story!</p>
+                                    
+                                    <div className="bg-white rounded-xl p-6 mb-6 shadow">
+                                        <p className="text-gray-500 text-sm uppercase mb-2">Question</p>
+                                        <p className="text-xl font-bold text-gray-900 mb-4">{myQuestion}</p>
+                                        
+                                        <div className="bg-green-50 border-2 border-green-300 rounded-lg p-4">
+                                            <p className="text-green-600 text-sm font-bold uppercase mb-1">✓ Your Answer (TRUTH)</p>
+                                            <p className="text-lg font-semibold text-gray-900">{myAnswer}</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <p className="text-gray-600 text-sm">
+                                        Tell a story based on the <span className="font-semibold text-green-600">true answer</span>. 
+                                        Don't let the Guesser figure out you're the Blue Fish!
+                                    </p>
+                                </div>
+                            )}
+
+                            {myRole === 'redFish' && (
+                                <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-2xl p-8 text-center">
+                                    <div className="text-5xl mb-4">🐠</div>
+                                    <h3 className="text-2xl font-bold text-red-800 mb-2">You are a RED FISH</h3>
+                                    <p className="text-red-600 mb-6">Tell a convincing lie!</p>
+                                    
+                                    <div className="bg-white rounded-xl p-6 mb-6 shadow">
+                                        <p className="text-gray-500 text-sm uppercase mb-2">Question</p>
+                                        <p className="text-xl font-bold text-gray-900 mb-4">{myQuestion}</p>
+                                        
+                                        <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4 mb-4">
+                                            <p className="text-red-600 text-sm font-bold uppercase mb-1">🎯 YOUR ANSWER (Must Say This!)</p>
+                                            <p className="text-lg font-semibold text-gray-900">{myAnswer}</p>
+                                        </div>
+                                        
+                                        {myLieSuggestion && (
+                                            <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
+                                                <p className="text-yellow-600 text-sm font-bold uppercase mb-1">💡 Hint (For Inspiration)</p>
+                                                <p className="text-gray-700">{myLieSuggestion}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                    
+                                    <p className="text-gray-600 text-sm">
+                                        You <span className="font-semibold text-red-600">MUST</span> use your assigned answer. 
+                                        Make it convincing so the Guesser doesn't pick you!
+                                    </p>
+                                </div>
+                            )}
+                        </div>
                     ) : (
                         <div className="flex-1 flex flex-col items-center justify-center text-center">
                             <div className="text-6xl mb-4">🐟</div>
@@ -348,7 +452,7 @@ export default function RoomPage() {
                                 Game in Progress
                             </h2>
                             <p className="text-gray-500">
-                                Game logic will be implemented in Phase 2
+                                Game logic will be implemented in Phase 1.3
                             </p>
                         </div>
                     )}
