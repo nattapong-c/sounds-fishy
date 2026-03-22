@@ -20,6 +20,10 @@ export default function RoomPage() {
     const [myLieSuggestion, setMyLieSuggestion] = useState<string>('');
     const [error, setError] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
+    const [showEliminationView, setShowEliminationView] = useState(false);
+    const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
+    const [rankings, setRankings] = useState<Array<{ position: number; playerId: string; playerName: string; totalPoints: number }>>([]);
     const wsRef = useRef<WebSocket | null>(null);
 
     // Connect to WebSocket
@@ -52,29 +56,94 @@ export default function RoomPage() {
                     case 'room_state_update':
                     case 'guess_submitted':
                         setRoomState(message.room);
+                        if (message.type === 'guess_submitted') {
+                            setShowEliminationView(false);
+                            setSelectedPlayerId(null);
+                            setShowConfirmModal(false);
+                        }
                         break;
                     case 'game_started':
                         // Handle role-specific game start data
                         setRoomState(message.room);
-                        
-                        // Find current player's ID from room state
-                        const currentPlayer = message.room.players?.find((p: any) => p.deviceId === deviceId);
-                        if (currentPlayer && message.playerDataMap) {
-                            const myData = message.playerDataMap[currentPlayer.id];
-                            if (myData) {
-                                setMyRole(myData.role);
-                                setMyQuestion(myData.question);
-                                if (myData.correctAnswer) {
-                                    setMyAnswer(myData.correctAnswer);
-                                }
-                                if (myData.fakeAnswer) {
-                                    setMyAnswer(myData.fakeAnswer);
-                                }
-                                if (myData.lieSuggestion) {
-                                    setMyLieSuggestion(myData.lieSuggestion);
-                                }
-                                console.log('Game started - My role:', myData.role);
+
+                        // Check if this is a reconnection (direct properties) or new game (playerDataMap)
+                        if (message.role) {
+                            // Reconnection: direct properties
+                            setMyRole(message.role);
+                            setMyQuestion(message.question);
+                            if (message.correctAnswer) {
+                                setMyAnswer(message.correctAnswer);
                             }
+                            if (message.fakeAnswer) {
+                                setMyAnswer(message.fakeAnswer);
+                            }
+                            if (message.lieSuggestion) {
+                                setMyLieSuggestion(message.lieSuggestion);
+                            }
+                            console.log('Game reconnected - My role:', message.role);
+                        } else if (message.playerDataMap) {
+                            // New game: playerDataMap structure
+                            const currentPlayer = message.room.players?.find((p: any) => p.deviceId === deviceId);
+                            if (currentPlayer && message.playerDataMap) {
+                                const myData = message.playerDataMap[currentPlayer.id];
+                                if (myData) {
+                                    setMyRole(myData.role);
+                                    setMyQuestion(myData.question);
+                                    if (myData.correctAnswer) {
+                                        setMyAnswer(myData.correctAnswer);
+                                    }
+                                    if (myData.fakeAnswer) {
+                                        setMyAnswer(myData.fakeAnswer);
+                                    }
+                                    if (myData.lieSuggestion) {
+                                        setMyLieSuggestion(myData.lieSuggestion);
+                                    }
+                                    console.log('Game started - My role:', myData.role);
+                                }
+                            }
+                        }
+                        break;
+                    case 'round_started':
+                        setRoomState(message.room);
+                        // Handle role-specific data for new round
+                        if (message.role) {
+                            // Reconnection: direct properties
+                            setMyRole(message.role);
+                            setMyQuestion(message.question);
+                            if (message.correctAnswer) {
+                                setMyAnswer(message.correctAnswer);
+                            }
+                            if (message.fakeAnswer) {
+                                setMyAnswer(message.fakeAnswer);
+                            }
+                            if (message.lieSuggestion) {
+                                setMyLieSuggestion(message.lieSuggestion);
+                            }
+                        } else if (message.playerDataMap) {
+                            // New round: playerDataMap structure
+                            const roundPlayer = message.room.players?.find((p: any) => p.deviceId === deviceId);
+                            if (roundPlayer && message.playerDataMap) {
+                                const myData = message.playerDataMap[roundPlayer.id];
+                                if (myData) {
+                                    setMyRole(myData.role);
+                                    setMyQuestion(myData.question);
+                                    if (myData.correctAnswer) {
+                                        setMyAnswer(myData.correctAnswer);
+                                    }
+                                    if (myData.fakeAnswer) {
+                                        setMyAnswer(myData.fakeAnswer);
+                                    }
+                                    if (myData.lieSuggestion) {
+                                        setMyLieSuggestion(myData.lieSuggestion);
+                                    }
+                                }
+                            }
+                        }
+                        break;
+                    case 'game_ended':
+                        setRoomState(message.room);
+                        if (message.rankings) {
+                            setRankings(message.rankings);
                         }
                         break;
                     case 'error':
@@ -108,7 +177,75 @@ export default function RoomPage() {
         }
     };
 
-    // Auto-reconnect on page load
+    // Handle kick player (admin only)
+    const handleKickPlayer = (targetPlayerId: string) => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({
+                type: 'kick_player',
+                targetPlayerId
+            }));
+        }
+    };
+
+    // Handle start game (admin only)
+    const handleStartGame = () => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({
+                type: 'start_game'
+            }));
+        }
+    };
+
+    // Handle show elimination view (Guesser only)
+    const handleShowElimination = () => {
+        setShowEliminationView(true);
+    };
+
+    // Handle select player for elimination
+    const handleSelectPlayer = (playerId: string) => {
+        setSelectedPlayerId(playerId);
+        setShowConfirmModal(true);
+    };
+
+    // Handle confirm elimination
+    const handleConfirmElimination = () => {
+        if (selectedPlayerId && wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({
+                type: 'submit_guess',
+                targetPlayerId: selectedPlayerId
+            }));
+        }
+        setShowConfirmModal(false);
+        setSelectedPlayerId(null);
+    };
+
+    // Handle next round (admin only)
+    const handleNextRound = () => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({
+                type: 'next_round'
+            }));
+        }
+    };
+
+    // Handle end game (admin only)
+    const handleEndGame = () => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({
+                type: 'end_game'
+            }));
+        }
+    };
+
+    // Handle go back to lobby (admin only, after game end)
+    const handleGoToLobby = async () => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({
+                type: 'end_round'
+            }));
+        }
+        setRankings([]);
+    };
     useEffect(() => {
         if (!deviceId) return;
 
@@ -171,26 +308,6 @@ export default function RoomPage() {
             setTimeout(() => setCopied(false), 2000);
         } catch (err) {
             console.error('Failed to copy room ID:', err);
-        }
-    };
-
-    // Handle kick player (admin only)
-    const handleKickPlayer = (targetPlayerId: string) => {
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({
-                type: 'kick_player',
-                targetPlayerId
-            }));
-        }
-    };
-
-    // Handle start game (admin only, stub)
-    const handleStartGame = () => {
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({
-                type: 'start_game',
-                hostPlayerId: null
-            }));
         }
     };
 
@@ -373,22 +490,68 @@ export default function RoomPage() {
                         // Game Started - Show Role-Specific View
                         <div className="flex-1 flex flex-col">
                             {myRole === 'guesser' && (
-                                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-8 text-center">
-                                    <div className="text-5xl mb-4">🔍</div>
-                                    <h3 className="text-2xl font-bold text-blue-800 mb-2">You are the GUESSER</h3>
-                                    <p className="text-blue-600 mb-6">Listen to their stories and find the Red Fish!</p>
-                                    
-                                    <div className="bg-white rounded-xl p-6 mb-6 shadow">
-                                        <p className="text-gray-500 text-sm uppercase mb-2">Question</p>
-                                        <p className="text-xl font-bold text-gray-900">{myQuestion}</p>
+                                <div className="flex-1 flex flex-col gap-6">
+                                    {/* Guesser Role Card */}
+                                    <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-8 text-center">
+                                        <div className="text-5xl mb-4">🔍</div>
+                                        <h3 className="text-2xl font-bold text-blue-800 mb-2">You are the GUESSER</h3>
+                                        <p className="text-blue-600 mb-6">Listen to their stories and find the Red Fish!</p>
+
+                                        <div className="bg-white rounded-xl p-6 mb-6 shadow">
+                                            <p className="text-gray-500 text-sm uppercase mb-2">Question</p>
+                                            <p className="text-xl font-bold text-gray-900">{myQuestion}</p>
+                                        </div>
+
+                                        <div className="text-gray-600 text-sm">
+                                            <p>🎯 All other players will tell their story</p>
+                                            <p>🐟 One is telling the truth (Blue Fish)</p>
+                                            <p>🐠 Rest are bluffing (Red Fish)</p>
+                                            <p className="mt-2 font-semibold">Find the Red Fish!</p>
+                                        </div>
                                     </div>
-                                    
-                                    <div className="text-gray-600 text-sm">
-                                        <p>🎯 All other players will tell their story</p>
-                                        <p>🐟 One is telling the truth (Blue Fish)</p>
-                                        <p>🐠 Rest are bluffing (Red Fish)</p>
-                                        <p className="mt-2 font-semibold">Find the Red Fish!</p>
-                                    </div>
+
+                                    {/* Go Eliminate Button */}
+                                    <button
+                                        onClick={handleShowElimination}
+                                        className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-xl font-bold tracking-wide py-4 px-12 rounded-xl transition-all shadow-lg"
+                                    >
+                                        <span className="flex items-center justify-center gap-3">
+                                            <span className="text-3xl">⚡</span>
+                                            Go Eliminate!
+                                        </span>
+                                    </button>
+
+                                    {/* Elimination View */}
+                                    {showEliminationView && (
+                                        <div className="bg-white rounded-2xl p-6 shadow-lg">
+                                            <h4 className="text-xl font-bold text-gray-800 mb-4">Select a Player to Eliminate</h4>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {roomState?.players
+                                                    .filter((p: any) => p.deviceId !== deviceId)
+                                                    .map((player: any) => (
+                                                        <button
+                                                            key={player.id}
+                                                            onClick={() => handleSelectPlayer(player.id)}
+                                                            className="p-4 border-2 border-gray-200 rounded-xl hover:border-red-300 hover:bg-red-50 transition-all text-left"
+                                                        >
+                                                            <div className="flex items-center gap-3">
+                                                                <span className="text-2xl">🎯</span>
+                                                                <div>
+                                                                    <p className="font-semibold text-gray-900">{player.name}</p>
+                                                                    <p className="text-sm text-gray-500">Click to eliminate</p>
+                                                                </div>
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                            </div>
+                                            <button
+                                                onClick={() => setShowEliminationView(false)}
+                                                className="mt-4 text-gray-500 hover:text-gray-700 font-medium"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
@@ -439,10 +602,127 @@ export default function RoomPage() {
                                     </div>
                                     
                                     <p className="text-gray-600 text-sm">
-                                        You <span className="font-semibold text-red-600">MUST</span> use your assigned answer. 
+                                        You <span className="font-semibold text-red-600">MUST</span> use your assigned answer.
                                         Make it convincing so the Guesser doesn't pick you!
                                     </p>
                                 </div>
+                            )}
+
+                            {/* Confirmation Modal */}
+                            {showConfirmModal && (
+                                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowConfirmModal(false)}>
+                                    <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                                        <div className="text-center mb-6">
+                                            <div className="text-5xl mb-4">⚠️</div>
+                                            <h3 className="text-2xl font-bold text-gray-800 mb-2">Confirm Elimination</h3>
+                                            <p className="text-gray-600">Are you sure you want to eliminate this player?</p>
+                                        </div>
+                                        <div className="flex gap-4">
+                                            <button
+                                                onClick={handleConfirmElimination}
+                                                className="flex-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-bold py-3 px-6 rounded-xl transition-all"
+                                            >
+                                                ✓ Confirm
+                                            </button>
+                                            <button
+                                                onClick={() => { setShowConfirmModal(false); setSelectedPlayerId(null); }}
+                                                className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-6 rounded-xl transition-all"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    ) : roomState?.status === 'round_end' ? (
+                        // Round End View
+                        <div className="flex-1 flex flex-col items-center justify-center text-center">
+                            <div className="text-6xl mb-4">🎯</div>
+                            <h2 className="text-2xl text-gray-700 mb-2 font-bold">Round Complete!</h2>
+                            <p className="text-gray-500 mb-6">Points have been awarded</p>
+                            
+                            {isAdmin ? (
+                                <div className="flex gap-4">
+                                    <button
+                                        onClick={handleNextRound}
+                                        className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white text-xl font-bold tracking-wide py-4 px-12 rounded-xl transition-all shadow-lg"
+                                    >
+                                        <span className="flex items-center gap-3">
+                                            <span className="text-3xl">🔄</span>
+                                            Next Round
+                                        </span>
+                                    </button>
+                                    <button
+                                        onClick={handleEndGame}
+                                        className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-xl font-bold tracking-wide py-4 px-12 rounded-xl transition-all shadow-lg"
+                                    >
+                                        <span className="flex items-center gap-3">
+                                            <span className="text-3xl">🏁</span>
+                                            End Game
+                                        </span>
+                                    </button>
+                                </div>
+                            ) : (
+                                <p className="text-yellow-500 text-lg flex items-center gap-2">
+                                    <span className="animate-pulse">⏳</span>
+                                    Waiting for admin...
+                                </p>
+                            )}
+                        </div>
+                    ) : roomState?.status === 'completed' ? (
+                        // Game End View with Rankings
+                        <div className="flex-1 flex flex-col">
+                            <div className="text-center mb-8">
+                                <div className="text-6xl mb-4">🏆</div>
+                                <h2 className="text-3xl font-bold text-gray-800 mb-2">Game Over!</h2>
+                                <p className="text-gray-500">Final Rankings</p>
+                            </div>
+
+                            <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+                                <div className="space-y-4">
+                                    {rankings.map((ranking, index) => (
+                                        <div
+                                            key={ranking.playerId}
+                                            className={`flex items-center gap-4 p-4 rounded-xl ${
+                                                ranking.position === 1 ? 'bg-gradient-to-r from-yellow-50 to-yellow-100 border-2 border-yellow-300' :
+                                                ranking.position === 2 ? 'bg-gradient-to-r from-gray-50 to-gray-100 border-2 border-gray-300' :
+                                                ranking.position === 3 ? 'bg-gradient-to-r from-orange-50 to-orange-100 border-2 border-orange-300' :
+                                                'bg-gray-50 border-2 border-gray-200'
+                                            }`}
+                                        >
+                                            <div className="text-3xl font-bold w-12 text-center">
+                                                {ranking.position === 1 ? '🥇' :
+                                                 ranking.position === 2 ? '🥈' :
+                                                 ranking.position === 3 ? '🥉' :
+                                                 `#${ranking.position}`}
+                                            </div>
+                                            <div className="flex-1">
+                                                <p className="font-bold text-gray-900">{ranking.playerName}</p>
+                                                {ranking.isTied && <p className="text-xs text-gray-500">Tied</p>}
+                                            </div>
+                                            <div className="text-2xl font-bold text-blue-600">
+                                                {ranking.totalPoints} pts
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {isAdmin ? (
+                                <button
+                                    onClick={handleGoToLobby}
+                                    className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-xl font-bold tracking-wide py-4 px-12 rounded-xl transition-all shadow-lg"
+                                >
+                                    <span className="flex items-center justify-center gap-3">
+                                        <span className="text-3xl">🏠</span>
+                                        Go back to Lobby
+                                    </span>
+                                </button>
+                            ) : (
+                                <p className="text-center text-gray-500">
+                                    Waiting for admin to return to lobby...
+                                </p>
                             )}
                         </div>
                     ) : (
@@ -452,7 +732,7 @@ export default function RoomPage() {
                                 Game in Progress
                             </h2>
                             <p className="text-gray-500">
-                                Game logic will be implemented in Phase 1.3
+                                Waiting for next phase...
                             </p>
                         </div>
                     )}

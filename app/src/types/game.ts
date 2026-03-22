@@ -89,3 +89,40 @@ export interface PlayerRanking {
     totalPoints: number;
     isTied: boolean;
 }
+
+/**
+ * Guess submission result
+ */
+export interface GuessResult {
+    type: 'guess_submitted';
+    targetPlayerId: string;
+    isCorrect: boolean;
+    tempPoints: number;
+    eliminatedPlayers: string[];
+    room: GameRoomState;
+}
+
+/**
+ * Round start payload
+ */
+export interface RoundStartPayload {
+    type: 'round_started';
+    round: number;
+    room: GameRoomState;
+    playerDataMap: Record<string, {
+        role: GameRole;
+        question: string;
+        correctAnswer?: string;
+        fakeAnswer?: string;
+        lieSuggestion?: string;
+    }>;
+}
+
+/**
+ * Game end payload
+ */
+export interface GameEndPayload {
+    type: 'game_ended';
+    room: GameRoomState;
+    rankings: PlayerRanking[];
+}

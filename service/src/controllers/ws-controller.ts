@@ -3,6 +3,7 @@ import { RoomModel } from '../models/room';
 import { logger } from '../lib/logger';
 import { getRandomQuestion } from '../services/question-bank-service';
 import { assignRoles } from '../game/roles';
+import { calculateGuesserScore, awardRoundPoints, updateRoleCounts, determineRoundWinner, calculateRankings } from '../game/scoring';
 
 type GameRole = 'guesser' | 'blueFish' | 'redFish';
 
@@ -41,18 +42,43 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
             player.isOnline = true;
             await room.save();
 
-            // Send current room state to this player
+            // Send current room state
             const roomState = JSON.stringify({
                 type: 'room_state_update',
                 room: room.toJSON()
             });
-            
+
             // Broadcast to ALL players in the room (including self)
             const broadcastCount = ws.publish(`room:${roomId}`, roomState);
             logger.info({ roomId, deviceId, broadcastCount }, 'Broadcasted room state to room channel');
-            
+
             // Also send directly to ensure this player receives it
             ws.send(roomState);
+
+            // If game is in progress, send player their role-specific data
+            if (room.status === 'playing' && player.inGameRole && room.question) {
+                let payload: any = {
+                    type: 'game_started',
+                    role: player.inGameRole,
+                    question: room.question,
+                    room: room.toJSON()
+                };
+
+                if (player.inGameRole === 'blueFish') {
+                    payload.correctAnswer = room.correctAnswer;
+                } else if (player.inGameRole === 'redFish' && room.fakeAnswersDistribution) {
+                    const fakeAnswer = room.fakeAnswersDistribution.get(player.id);
+                    const lieSuggestion = room.players
+                        .filter((p: any) => p.inGameRole === 'redFish' && p.id !== player.id)
+                        .map((p: any) => room.fakeAnswersDistribution?.get(p.id))
+                        .find((a: string) => a !== fakeAnswer);
+                    payload.fakeAnswer = fakeAnswer;
+                    payload.lieSuggestion = lieSuggestion;
+                }
+
+                ws.send(JSON.stringify(payload));
+                logger.info({ roomId, deviceId, role: player.inGameRole }, 'Sent role data to reconnecting player');
+            }
         },
         async message(ws, message: any) {
             const { roomId } = ws.data.params;
@@ -197,25 +223,292 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                 }
 
                 /**
-                 * End Round
+                 * Submit Guess (Guesser eliminates a player)
+                 */
+                if (parsedMessage.type === 'submit_guess') {
+                    // Validate sender is current Guesser
+                    if (player.inGameRole !== 'guesser') {
+                        ws.send(JSON.stringify({
+                            type: 'error',
+                            message: 'Only Guesser can submit guesses'
+                        }));
+                        return;
+                    }
+
+                    // Validate game is in guessing phase
+                    if (room.status !== 'playing') {
+                        ws.send(JSON.stringify({
+                            type: 'error',
+                            message: 'Game is not in guessing phase'
+                        }));
+                        return;
+                    }
+
+                    const targetPlayerId = parsedMessage.targetPlayerId;
+                    const targetPlayer = room.players.find(p => p.id === targetPlayerId);
+
+                    if (!targetPlayer) {
+                        ws.send(JSON.stringify({
+                            type: 'error',
+                            message: 'Player not found'
+                        }));
+                        return;
+                    }
+
+                    // Check if already eliminated
+                    if (room.eliminatedPlayers?.includes(targetPlayerId)) {
+                        ws.send(JSON.stringify({
+                            type: 'error',
+                            message: 'Player already eliminated'
+                        }));
+                        return;
+                    }
+
+                    logger.info({ roomId, guesserId: player.id, targetPlayerId }, 'Guesser submitted guess');
+
+                    // Determine target's role
+                    const targetRole = targetPlayer.inGameRole;
+                    const isCorrect = targetRole === 'redFish';
+
+                    // Update temp points
+                    room.currentTempPoints = calculateGuesserScore(isCorrect, room.currentTempPoints || 0);
+
+                    // Add to eliminated players
+                    if (!room.eliminatedPlayers) {
+                        room.eliminatedPlayers = [];
+                    }
+                    room.eliminatedPlayers.push(targetPlayerId);
+
+                    // Calculate remaining Red Fish
+                    const remainingRedFish = room.players.filter(p => 
+                        p.inGameRole === 'redFish' && !room.eliminatedPlayers?.includes(p.id)
+                    ).length;
+
+                    // Determine round winner
+                    const winner = determineRoundWinner(targetRole as 'blueFish' | 'redFish', remainingRedFish);
+
+                    // Initialize scores map if needed
+                    if (!room.scores) {
+                        room.scores = new Map();
+                    }
+
+                    if (winner === 'guesser' || winner === 'redFish') {
+                        // Round ended - award points
+                        const guesserId = room.players.find(p => p.inGameRole === 'guesser')?.id;
+                        const blueFishId = room.players.find(p => p.inGameRole === 'blueFish')?.id;
+                        const redFishIds = room.players.filter(p => p.inGameRole === 'redFish').map(p => p.id);
+
+                        if (guesserId && blueFishId) {
+                            awardRoundPoints(room.scores, guesserId, blueFishId, redFishIds, winner, room.currentTempPoints || 0);
+                            
+                            // Update role counts
+                            updateRoleCounts(room.scores, guesserId, blueFishId, redFishIds);
+                        }
+
+                        // Transition to round_end
+                        room.status = 'round_end';
+                        
+                        logger.info({ roomId, winner, tempPoints: room.currentTempPoints }, 'Round ended');
+                    } else {
+                        // Game continues - more Red Fish to eliminate
+                        logger.info({ roomId, tempPoints: room.currentTempPoints, remainingRedFish }, 'Guess correct, game continues');
+                    }
+
+                    await room.save();
+
+                    // Broadcast result
+                    const payload = {
+                        type: 'guess_submitted',
+                        targetPlayerId,
+                        isCorrect,
+                        tempPoints: room.currentTempPoints,
+                        eliminatedPlayers: room.eliminatedPlayers,
+                        room: room.toJSON()
+                    };
+
+                    ws.publish(`room:${roomId}`, JSON.stringify(payload));
+                    ws.send(JSON.stringify(payload));
+                }
+
+                /**
+                 * End Round (Admin forces end)
                  */
                 else if (parsedMessage.type === 'end_round') {
                     logger.info({ roomId, deviceId }, 'Admin ended the round');
-                    
+
                     room.status = 'lobby';
                     room.players.forEach(p => {
                         p.inGameRole = null;
                     });
                     room.question = null;
                     room.correctAnswer = null;
+                    room.eliminatedPlayers = [];
+                    room.currentTempPoints = 0;
                     await room.save();
 
-                    const updatePayload = JSON.stringify({ 
-                        type: 'room_state_update', 
-                        room: room.toJSON() 
+                    const updatePayload = JSON.stringify({
+                        type: 'room_state_update',
+                        room: room.toJSON()
                     });
                     ws.publish(`room:${roomId}`, updatePayload);
                     ws.send(updatePayload);
+                }
+
+                /**
+                 * Next Round (Start new round with rotated Guesser)
+                 */
+                else if (parsedMessage.type === 'next_round') {
+                    // Validate admin
+                    if (!player.isAdmin) {
+                        ws.send(JSON.stringify({
+                            type: 'error',
+                            message: 'Only admin can start next round'
+                        }));
+                        return;
+                    }
+
+                    logger.info({ roomId, deviceId }, 'Admin started next round');
+
+                    // Check if all players have been Guesser
+                    const guesserHistory = room.gameHistory || [];
+                    const allBeenGuesser = room.players.every(p => 
+                        guesserHistory.some(h => h.guesserId === p.id)
+                    );
+
+                    if (allBeenGuesser) {
+                        ws.send(JSON.stringify({
+                            type: 'error',
+                            message: 'All players have been Guesser. Game is over.'
+                        }));
+                        return;
+                    }
+
+                    // Reset room for new round
+                    room.status = 'playing';
+                    room.question = null;
+                    room.correctAnswer = null;
+                    room.eliminatedPlayers = [];
+                    room.currentTempPoints = 0;
+                    room.fakeAnswersDistribution = new Map();
+
+                    // Assign new roles (rotates Guesser)
+                    const roleAssignment = assignRoles(room.players, room.lastGuesserId);
+                    
+                    // Update player roles
+                    room.players.forEach(p => {
+                        const role = roleAssignment.assignments.get(p.id);
+                        if (role) {
+                            p.inGameRole = role;
+                        }
+                    });
+
+                    room.lastGuesserId = roleAssignment.guesserId;
+                    room.currentRound = (room.currentRound || 1) + 1;
+
+                    // Get new question
+                    const questionData = await getRandomQuestion('english', 'medium');
+                    if (!questionData) {
+                        ws.send(JSON.stringify({
+                            type: 'error',
+                            message: 'Failed to get question'
+                        }));
+                        return;
+                    }
+
+                    room.question = questionData.question;
+                    room.correctAnswer = questionData.correctAnswer;
+
+                    // Distribute fake answers to Red Fish
+                    const fakeAnswersDistribution = new Map<string, string>();
+                    const shuffledFakes = [...questionData.fakeAnswers].sort(() => 0.5 - Math.random());
+                    roleAssignment.redFishIds.forEach((playerId, index) => {
+                        const fakeAnswer = shuffledFakes[index % shuffledFakes.length];
+                        fakeAnswersDistribution.set(playerId, fakeAnswer);
+                    });
+                    room.fakeAnswersDistribution = fakeAnswersDistribution;
+
+                    await room.save();
+
+                    // Build player data map and broadcast (same as start_game)
+                    const playerDataMap: Record<string, {
+                        role: GameRole;
+                        question: string;
+                        correctAnswer?: string;
+                        fakeAnswer?: string;
+                        lieSuggestion?: string;
+                    }> = {};
+
+                    playerDataMap[roleAssignment.guesserId] = {
+                        role: 'guesser',
+                        question: room.question!
+                    };
+
+                    playerDataMap[roleAssignment.blueFishId] = {
+                        role: 'blueFish',
+                        question: room.question!,
+                        correctAnswer: room.correctAnswer!
+                    };
+
+                    roleAssignment.redFishIds.forEach((playerId, index) => {
+                        const fakeAnswer = shuffledFakes[index % shuffledFakes.length];
+                        const lieSuggestion = questionData.fakeAnswers.find(a => a !== fakeAnswer);
+                        playerDataMap[playerId] = {
+                            role: 'redFish',
+                            question: room.question!,
+                            fakeAnswer,
+                            lieSuggestion
+                        };
+                    });
+
+                    const payload = {
+                        type: 'round_started',
+                        round: room.currentRound,
+                        room: room.toJSON(),
+                        playerDataMap
+                    };
+
+                    ws.publish(`room:${roomId}`, JSON.stringify(payload));
+                    ws.send(JSON.stringify(payload));
+
+                    logger.info({ 
+                        roomId, 
+                        round: room.currentRound,
+                        guesserId: roleAssignment.guesserId 
+                    }, 'New round started');
+                }
+
+                /**
+                 * End Game (Admin ends game, show final rankings)
+                 */
+                else if (parsedMessage.type === 'end_game') {
+                    // Validate admin
+                    if (!player.isAdmin) {
+                        ws.send(JSON.stringify({
+                            type: 'error',
+                            message: 'Only admin can end game'
+                        }));
+                        return;
+                    }
+
+                    logger.info({ roomId, deviceId }, 'Admin ended game');
+
+                    // Calculate final rankings
+                    const scores = room.scores || new Map();
+                    const rankings = calculateRankings(room.players, scores);
+
+                    room.status = 'completed';
+                    await room.save();
+
+                    const payload = {
+                        type: 'game_ended',
+                        room: room.toJSON(),
+                        rankings
+                    };
+
+                    ws.publish(`room:${roomId}`, JSON.stringify(payload));
+                    ws.send(JSON.stringify(payload));
+
+                    logger.info({ roomId, rankings }, 'Game ended with rankings');
                 }
 
                 /**
