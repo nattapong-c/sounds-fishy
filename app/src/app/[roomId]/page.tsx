@@ -414,6 +414,21 @@ export default function RoomPage() {
 
         const { eliminatedPlayerName, eliminatedPlayerRole, isCorrect, tempPoints, isRoundOver, pointsAwarded } = eliminationResult;
 
+        // Determine button display based on role and round state
+        const isGuesser = myRole === 'guesser';
+        const showContinueButton = isGuesser && !isRoundOver;
+        const showCloseButton = !isGuesser || (isGuesser && isRoundOver);
+
+        // Auto-close modal for non-Guesser players after 4 seconds
+        useEffect(() => {
+            if (!isGuesser) {
+                const timer = setTimeout(() => {
+                    setShowEliminationModal(false);
+                }, 4000);
+                return () => clearTimeout(timer);
+            }
+        }, [isGuesser]);
+
         return (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
                 <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full transform transition-all scale-100">
@@ -443,8 +458,8 @@ export default function RoomPage() {
                                     +{tempPoints} Temp Point{tempPoints !== 1 ? 's' : ''}
                                 </p>
                                 <p className="text-gray-600">
-                                    {isRoundOver 
-                                        ? `Round Over! ${pointsAwarded} points awarded!` 
+                                    {isRoundOver
+                                        ? `Round Over! ${pointsAwarded} points awarded!`
                                         : 'Keep eliminating Red Fish!'}
                                 </p>
                             </>
@@ -460,8 +475,8 @@ export default function RoomPage() {
                         )}
                     </div>
 
-                    {/* Continue Button */}
-                    {!isRoundOver && (
+                    {/* Action Buttons - Role-based */}
+                    {showContinueButton && (
                         <button
                             onClick={() => setShowEliminationModal(false)}
                             className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-xl font-bold py-4 rounded-xl transition-all"
@@ -470,11 +485,41 @@ export default function RoomPage() {
                         </button>
                     )}
 
-                    {/* Round Over Message */}
-                    {isRoundOver && (
-                        <p className="text-center text-gray-500">
-                            Showing points breakdown...
-                        </p>
+                    {showCloseButton && isGuesser && (
+                        <>
+                            {/* Round End Message for Guesser */}
+                            <div className="mb-4 text-center">
+                                {isCorrect ? (
+                                    <p className="text-green-600 font-bold">
+                                        🎉 All Red Fish eliminated!
+                                    </p>
+                                ) : (
+                                    <p className="text-red-600 font-bold">
+                                        ❌ Blue Fish eliminated
+                                    </p>
+                                )}
+                                <p className="text-gray-600 text-sm mt-1">
+                                    {isCorrect
+                                        ? `+${pointsAwarded} points earned!`
+                                        : 'Points reset to 0'}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setShowEliminationModal(false)}
+                                className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-xl font-bold py-4 rounded-xl transition-all"
+                            >
+                                Close
+                            </button>
+                        </>
+                    )}
+
+                    {showCloseButton && !isGuesser && (
+                        <button
+                            onClick={() => setShowEliminationModal(false)}
+                            className="w-full bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white text-xl font-bold py-4 rounded-xl transition-all"
+                        >
+                            Close
+                        </button>
                     )}
                 </div>
             </div>
