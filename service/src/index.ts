@@ -43,7 +43,10 @@ const app = new Elysia()
     });
 
 // Store server instance globally for pub/sub broadcasting from REST controllers
-const server = app.listen(PORT, () => {
+const server = app.listen({
+  port: PORT,
+  hostname: process.env.HOSTNAME || "localhost"
+}, () => {
     logger.info({ port: PORT }, `Sounds Fishy API server running on http://localhost:${PORT}`);
 });
 
