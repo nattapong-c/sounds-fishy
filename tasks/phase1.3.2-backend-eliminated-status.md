@@ -1,7 +1,8 @@
 # Phase 1.3.2 Backend: Eliminated Player Status
 
-**Status:** ⏳ Not Started
+**Status:** ✅ Completed
 **Created:** 2026-03-23
+**Updated:** 2026-03-23
 **Target:** 2026-03-23
 **Total Tasks:** 1
 
@@ -13,9 +14,9 @@ Backend already tracks eliminated players in `room.eliminatedPlayers` array. Thi
 
 ## Tasks
 
-### Pending ⏳
+### Completed ✅
 
-- [ ] **T1. Backend: Verify Eliminated Players in Broadcast**
+- [x] **T1. Backend: Verify Eliminated Players in Broadcast**
   - **Dependencies:** None
   - **Effort:** S (0.5h)
   - **Files to Modify:** `service/src/controllers/ws-controller.ts`

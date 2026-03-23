@@ -1,7 +1,8 @@
 # Phase 1.3.2 Frontend: Eliminated Player Visual Feedback
 
-**Status:** ⏳ Not Started
+**Status:** ✅ Completed
 **Created:** 2026-03-23
+**Updated:** 2026-03-23
 **Target:** 2026-03-23
 **Total Tasks:** 2
 
@@ -13,9 +14,9 @@ Frontend enhancement to show eliminated players in the selection grid with visua
 
 ## Tasks
 
-### Pending ⏳
+### Completed ✅
 
-- [ ] **T2. Frontend: Eliminated Player Visual Indicator**
+- [x] **T2. Frontend: Eliminated Player Visual Indicator**
   - **Dependencies:** T1 (Backend: Verify Eliminated Players in Broadcast)
   - **Effort:** M (2-3h)
   - **Files to Modify:** `app/src/app/[roomId]/page.tsx`
@@ -27,7 +28,7 @@ Frontend enhancement to show eliminated players in the selection grid with visua
     - ✅ Clear visual distinction from active players
     - ✅ Mobile responsive on elimination grid
 
-- [ ] **T3. Frontend: Prevent Selecting Eliminated Players**
+- [x] **T3. Frontend: Prevent Selecting Eliminated Players**
   - **Dependencies:** T2
   - **Effort:** S (1h)
   - **Files to Modify:** `app/src/app/[roomId]/page.tsx`

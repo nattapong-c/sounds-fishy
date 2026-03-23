@@ -1,7 +1,8 @@
 # Phase 1.1 Frontend: Room Management & WebSocket
 
-**Status:** ⏳ Not Started  
-**Created:** 2026-03-20  
+**Status:** ✅ Completed
+**Created:** 2026-03-20
+**Updated:** 2026-03-23  
 **Target:** 2026-03-21  
 **Total Tasks:** 7
 
@@ -13,9 +14,9 @@ Frontend implementation for room lifecycle: home page (create/join), room page w
 
 ## Tasks
 
-### Pending ⏳
+### Completed ✅
 
-- [ ] **T7. Frontend: DeviceId Hook**
+- [x] **T7. Frontend: DeviceId Hook**
   - **Dependencies:** None
   - **Effort:** S (1-2h)
   - **Files to Create/Modify:** `app/src/hooks/useDeviceId.ts`
@@ -26,7 +27,7 @@ Frontend implementation for room lifecycle: home page (create/join), room page w
     - ✅ Returns same deviceId on subsequent calls
     - ✅ Works in Next.js client components ('use client')
 
-- [ ] **T8. Frontend: API Client Setup**
+- [x] **T8. Frontend: API Client Setup**
   - **Dependencies:** None
   - **Effort:** S (1-2h)
   - **Files to Create/Modify:** `app/src/lib/api.ts`
@@ -39,7 +40,7 @@ Frontend implementation for room lifecycle: home page (create/join), room page w
     - ✅ getRoom() method
     - ✅ Proper error handling
 
-- [ ] **T9. Frontend: Home Page (Create/Join)**
+- [x] **T9. Frontend: Home Page (Create/Join)**
   - **Dependencies:** T7, T8
   - **Effort:** M (3-4h)
   - **Files to Create/Modify:** `app/src/app/page.tsx`
@@ -52,7 +53,7 @@ Frontend implementation for room lifecycle: home page (create/join), room page w
     - ✅ Error display for failures
     - ✅ Mobile responsive
 
-- [ ] **T10. Frontend: Room Page - Join Flow**
+- [x] **T10. Frontend: Room Page - Join Flow**
   - **Dependencies:** T7, T8, T9
   - **Effort:** M (3-4h)
   - **Files to Create/Modify:** `app/src/app/[roomId]/page.tsx`
@@ -65,7 +66,7 @@ Frontend implementation for room lifecycle: home page (create/join), room page w
     - ✅ Connects WebSocket after successful join
     - ✅ Redirects to home if room not found
 
-- [ ] **T11. Frontend: WebSocket Integration**
+- [x] **T11. Frontend: WebSocket Integration**
   - **Dependencies:** T10
   - **Effort:** M (3-4h)
   - **Files to Create/Modify:** `app/src/app/[roomId]/page.tsx`
@@ -78,7 +79,7 @@ Frontend implementation for room lifecycle: home page (create/join), room page w
     - ✅ Handles disconnect (console log, no crash)
     - ✅ Cleanup on unmount
 
-- [ ] **T12. Frontend: Room Page - Lobby UI**
+- [x] **T12. Frontend: Room Page - Lobby UI**
   - **Dependencies:** T11
   - **Effort:** M (3-4h)
   - **Files to Create/Modify:** `app/src/app/[roomId]/page.tsx`
@@ -93,7 +94,7 @@ Frontend implementation for room lifecycle: home page (create/join), room page w
     - ✅ Admin sees kick buttons
     - ✅ Mobile responsive
 
-- [ ] **T13. Frontend: Handle Kicked/Removed Players**
+- [x] **T13. Frontend: Handle Kicked/Removed Players**
   - **Dependencies:** T11, T12
   - **Effort:** S (1-2h)
   - **Files to Create/Modify:** `app/src/app/[roomId]/page.tsx`

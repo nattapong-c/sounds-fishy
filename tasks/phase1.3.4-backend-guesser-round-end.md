@@ -1,7 +1,8 @@
 # Phase 1.3.4 Backend: Guesser Round End State
 
-**Status:** ⏳ Not Started
+**Status:** ✅ Completed
 **Created:** 2026-03-23
+**Updated:** 2026-03-23
 **Target:** 2026-03-23
 **Total Tasks:** 1
 
@@ -13,9 +14,9 @@ Backend already sends `isRoundOver` flag in the `guess_submitted` payload. When 
 
 ## Tasks
 
-### Pending ⏳
+### Completed ✅
 
-- [ ] **T1. Backend: Verify Round End State for Guesser**
+- [x] **T1. Backend: Verify Round End State for Guesser**
   - **Dependencies:** None
   - **Effort:** S (0.5h)
   - **Files to Modify:** `service/src/controllers/ws-controller.ts`

@@ -1,7 +1,8 @@
 # Phase 1.2 Backend: Game Start & Guessing Phase
 
-**Status:** ⏳ Not Started  
-**Created:** 2026-03-20  
+**Status:** ✅ Completed
+**Created:** 2026-03-20
+**Updated:** 2026-03-23  
 **Target:** 2026-03-21  
 **Total Tasks:** 6
 
@@ -13,9 +14,9 @@ Backend implementation for starting the game: assign roles (Guesser, Blue Fish, 
 
 ## Tasks
 
-### Pending ⏳
+### Completed ✅
 
-- [ ] **T1. Backend: Question Bank Schema & Seed Data**
+- [x] **T1. Backend: Question Bank Schema & Seed Data**
   - **Dependencies:** None
   - **Effort:** S (1-2h)
   - **Files to Create/Modify:** `service/src/models/question-bank.ts`, `service/scripts/seed-questions.ts`
@@ -26,7 +27,7 @@ Backend implementation for starting the game: assign roles (Guesser, Blue Fish, 
     - ✅ Seed script populates 20+ questions
     - ✅ Questions cover different categories (kitchen, animals, jobs, etc.)
 
-- [ ] **T2. Backend: Question Bank Service**
+- [x] **T2. Backend: Question Bank Service**
   - **Dependencies:** T1
   - **Effort:** S (1-2h)
   - **Files to Create/Modify:** `service/src/services/question-bank-service.ts`
@@ -36,7 +37,7 @@ Backend implementation for starting the game: assign roles (Guesser, Blue Fish, 
     - ✅ Handles empty database gracefully
     - ✅ Logs question selection for debugging
 
-- [ ] **T3. Backend: Room Model Update for Game State**
+- [x] **T3. Backend: Room Model Update for Game State**
   - **Dependencies:** None
   - **Effort:** S (1h)
   - **Files to Create/Modify:** `service/src/models/room.ts`
@@ -47,7 +48,7 @@ Backend implementation for starting the game: assign roles (Guesser, Blue Fish, 
     - ✅ roundGuesserId (tracks whose turn to guess)
     - ✅ scores map with playerId → {totalPoints, tempPoints, roundsAsGuesser, roundsAsBlueFish, roundsAsRedFish}
 
-- [ ] **T4. Backend: Role Assignment Logic**
+- [x] **T4. Backend: Role Assignment Logic**
   - **Dependencies:** T3
   - **Effort:** M (3-4h)
   - **Files to Create/Modify:** `service/src/game/roles.ts`
@@ -59,7 +60,7 @@ Backend implementation for starting the game: assign roles (Guesser, Blue Fish, 
     - ✅ Rest are Red Fish
     - ✅ Handles 4-8 players correctly
 
-- [ ] **T5. Backend: Start Game WebSocket Handler**
+- [x] **T5. Backend: Start Game WebSocket Handler**
   - **Dependencies:** T2, T4
   - **Effort:** M (3-4h)
   - **Files to Create/Modify:** `service/src/controllers/ws-controller.ts`
@@ -72,7 +73,7 @@ Backend implementation for starting the game: assign roles (Guesser, Blue Fish, 
     - ✅ Updates room status to 'playing'
     - ✅ Broadcasts game_started with role-specific data
 
-- [ ] **T6. Backend: Role-Specific Payload Builder**
+- [x] **T6. Backend: Role-Specific Payload Builder**
   - **Dependencies:** T5
   - **Effort:** S (1-2h)
   - **Files to Create/Modify:** `service/src/controllers/ws-controller.ts`

@@ -1,7 +1,8 @@
 # Phase 1.3 Backend: Elimination & Scoring
 
-**Status:** ⏳ Not Started  
-**Created:** 2026-03-20  
+**Status:** ✅ Completed
+**Created:** 2026-03-20
+**Updated:** 2026-03-23  
 **Target:** 2026-03-21  
 **Total Tasks:** 6
 
@@ -13,9 +14,9 @@ Backend implementation for elimination and scoring: handle Guesser's player sele
 
 ## Tasks
 
-### Pending ⏳
+### Completed ✅
 
-- [ ] **T1. Backend: Scoring System Service**
+- [x] **T1. Backend: Scoring System Service**
   - **Dependencies:** None
   - **Effort:** M (3-4h)
   - **Files to Create/Modify:** `service/src/game/scoring.ts`
@@ -28,7 +29,7 @@ Backend implementation for elimination and scoring: handle Guesser's player sele
     - ✅ Awards temp points to Guesser + 1 point to Blue Fish when all Red Fish eliminated
     - ✅ Awards 1 point to remaining Red Fish when Guesser picks Blue Fish
 
-- [ ] **T2. Backend: Room Model Update for Scoring**
+- [x] **T2. Backend: Room Model Update for Scoring**
   - **Dependencies:** None
   - **Effort:** S (1h)
   - **Files to Create/Modify:** `service/src/models/room.ts`
@@ -39,7 +40,7 @@ Backend implementation for elimination and scoring: handle Guesser's player sele
     - ✅ gameHistory: array of round results
     - ✅ allPlayersBeenGuesser: boolean or Set<string>
 
-- [ ] **T3. Backend: Elimination WebSocket Handler**
+- [x] **T3. Backend: Elimination WebSocket Handler**
   - **Dependencies:** T1, T2
   - **Effort:** M (3-4h)
   - **Files to Create/Modify:** `service/src/controllers/ws-controller.ts`
@@ -53,7 +54,7 @@ Backend implementation for elimination and scoring: handle Guesser's player sele
     - ✅ Broadcasts guess_submitted with updated scores
     - ✅ Triggers round_end if Blue Fish selected or all Red Fish eliminated
 
-- [ ] **T4. Backend: Game State Management**
+- [x] **T4. Backend: Game State Management**
   - **Dependencies:** T2
   - **Effort:** M (3-4h)
   - **Files to Create/Modify:** `service/src/game/state.ts`
@@ -65,7 +66,7 @@ Backend implementation for elimination and scoring: handle Guesser's player sele
     - ✅ `getNextGuesser(players, lastGuesserId)` - rotates Guesser role
     - ✅ `allPlayersBeenGuesser(room)` - checks if game should end
 
-- [ ] **T5. Backend: Next Round Handler**
+- [x] **T5. Backend: Next Round Handler**
   - **Dependencies:** T4
   - **Effort:** M (3-4h)
   - **Files to Create/Modify:** `service/src/controllers/ws-controller.ts`
@@ -78,7 +79,7 @@ Backend implementation for elimination and scoring: handle Guesser's player sele
     - ✅ Gets new question from question bank
     - ✅ Broadcasts round_started with new roles
 
-- [ ] **T6. Backend: End Game Handler**
+- [x] **T6. Backend: End Game Handler**
   - **Dependencies:** T4
   - **Effort:** S (2-3h)
   - **Files to Create/Modify:** `service/src/controllers/ws-controller.ts`

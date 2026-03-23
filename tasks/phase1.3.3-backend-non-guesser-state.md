@@ -1,7 +1,8 @@
 # Phase 1.3.3 Backend: Non-Guesser Elimination State
 
-**Status:** ⏳ Not Started
+**Status:** ✅ Completed
 **Created:** 2026-03-23
+**Updated:** 2026-03-23
 **Target:** 2026-03-23
 **Total Tasks:** 1
 
@@ -13,9 +14,9 @@ Backend already broadcasts elimination results to all players. Non-Guesser playe
 
 ## Tasks
 
-### Pending ⏳
+### Completed ✅
 
-- [ ] **T1. Backend: Verify Elimination Broadcast to All Players**
+- [x] **T1. Backend: Verify Elimination Broadcast to All Players**
   - **Dependencies:** None
   - **Effort:** S (0.5h)
   - **Files to Modify:** `service/src/controllers/ws-controller.ts`

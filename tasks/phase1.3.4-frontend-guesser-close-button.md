@@ -1,7 +1,8 @@
 # Phase 1.3.4 Frontend: Close Button for Guesser When Round Ends
 
-**Status:** ⏳ Not Started
+**Status:** ✅ Completed
 **Created:** 2026-03-23
+**Updated:** 2026-03-23
 **Target:** 2026-03-23
 **Total Tasks:** 2
 
@@ -13,9 +14,9 @@ When the round ends (all Red Fish eliminated OR Blue Fish eliminated), the Guess
 
 ## Tasks
 
-### Pending ⏳
+### Completed ✅
 
-- [ ] **T2. Frontend: Show Close Button for Guesser When Round Ends**
+- [x] **T2. Frontend: Show Close Button for Guesser When Round Ends**
   - **Dependencies:** T1 (Backend: Verify Round End State for Guesser)
   - **Effort:** S (1-2h)
   - **Files to Modify:** `app/src/app/[roomId]/page.tsx`
@@ -27,7 +28,7 @@ When the round ends (all Red Fish eliminated OR Blue Fish eliminated), the Guess
     - ✅ Button styling consistent (blue gradient for both)
     - ✅ Modal closes when button clicked
 
-- [ ] **T3. Frontend: Add Round End Message for Guesser**
+- [x] **T3. Frontend: Add Round End Message for Guesser**
   - **Dependencies:** T2
   - **Effort:** S (1h)
   - **Files to Modify:** `app/src/app/[roomId]/page.tsx`

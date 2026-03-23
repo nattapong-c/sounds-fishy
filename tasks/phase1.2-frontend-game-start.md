@@ -1,7 +1,8 @@
 # Phase 1.2 Frontend: Game Start & Guessing Phase
 
-**Status:** ⏳ Not Started  
-**Created:** 2026-03-20  
+**Status:** ✅ Completed
+**Created:** 2026-03-20
+**Updated:** 2026-03-23  
 **Updated:** 2026-03-20  
 **Target:** 2026-03-21  
 **Total Tasks:** 5
@@ -16,9 +17,9 @@ Frontend implementation for game start: handle game_started event, display role-
 
 ## Tasks
 
-### Pending ⏳
+### Completed ✅
 
-- [ ] **T7. Frontend: Game State Types & Interfaces**
+- [x] **T7. Frontend: Game State Types & Interfaces**
   - **Dependencies:** None
   - **Effort:** S (1h)
   - **Files to Create/Modify:** `app/src/types/game.ts`
@@ -29,7 +30,7 @@ Frontend implementation for game start: handle game_started event, display role-
     - ✅ GamePayload interface (role-specific)
     - ✅ RoomState extension with game fields
 
-- [ ] **T8. Frontend: Game Started Event Handler**
+- [x] **T8. Frontend: Game Started Event Handler**
   - **Dependencies:** T7
   - **Effort:** M (3-4h)
   - **Files to Create/Modify:** `app/src/app/[roomId]/page.tsx`
@@ -40,7 +41,7 @@ Frontend implementation for game start: handle game_started event, display role-
     - ✅ Shows role-specific view
     - ✅ Displays question/answer correctly
 
-- [ ] **T9. Frontend: Guesser View Component**
+- [x] **T9. Frontend: Guesser View Component**
   - **Dependencies:** T8
   - **Effort:** S (2-3h)
   - **Files to Create/Modify:** `app/src/app/[roomId]/page.tsx` (inline component)
@@ -52,7 +53,7 @@ Frontend implementation for game start: handle game_started event, display role-
     - ✅ Does NOT show any answers
     - ✅ Clean, minimal design
 
-- [ ] **T10. Frontend: Blue Fish View Component**
+- [x] **T10. Frontend: Blue Fish View Component**
   - **Dependencies:** T8
   - **Effort:** S (2-3h)
   - **Files to Create/Modify:** `app/src/app/[roomId]/page.tsx` (inline component)
@@ -64,7 +65,7 @@ Frontend implementation for game start: handle game_started event, display role-
     - ✅ Tap-to-reveal (hide by default to prevent cheating)
     - ✅ Clean, minimal design
 
-- [ ] **T11. Frontend: Red Fish View Component**
+- [x] **T11. Frontend: Red Fish View Component**
   - **Dependencies:** T8
   - **Effort:** S (2-3h)
   - **Files to Create/Modify:** `app/src/app/[roomId]/page.tsx` (inline component)

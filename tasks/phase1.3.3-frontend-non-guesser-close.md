@@ -1,7 +1,8 @@
 # Phase 1.3.3 Frontend: Non-Guesser Close Button
 
-**Status:** ⏳ Not Started
+**Status:** ✅ Completed
 **Created:** 2026-03-23
+**Updated:** 2026-03-23
 **Target:** 2026-03-23
 **Total Tasks:** 2
 
@@ -13,9 +14,9 @@ When a guess is submitted, all players see the elimination result modal. However
 
 ## Tasks
 
-### Pending ⏳
+### Completed ✅
 
-- [ ] **T2. Frontend: Conditional Button Display in Elimination Modal**
+- [x] **T2. Frontend: Conditional Button Display in Elimination Modal**
   - **Dependencies:** T1 (Backend: Verify Elimination Broadcast to All Players)
   - **Effort:** M (2-3h)
   - **Files to Modify:** `app/src/app/[roomId]/page.tsx`
@@ -28,7 +29,7 @@ When a guess is submitted, all players see the elimination result modal. However
     - ✅ Button text is clear and appropriate for each role
     - ✅ Modal closes when non-Guesser clicks button
 
-- [ ] **T3. Frontend: Auto-close Modal for Non-Guesser (Optional Polish)**
+- [x] **T3. Frontend: Auto-close Modal for Non-Guesser (Optional Polish)**
   - **Dependencies:** T2
   - **Effort:** S (1h)
   - **Files to Modify:** `app/src/app/[roomId]/page.tsx`

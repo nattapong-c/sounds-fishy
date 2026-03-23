@@ -1,7 +1,8 @@
 # Phase 1.3.1 Frontend: Elimination Feedback & Score Display
 
-**Status:** ⏳ Not Started  
-**Created:** 2026-03-20  
+**Status:** ✅ Completed
+**Created:** 2026-03-20
+**Updated:** 2026-03-23  
 **Updated:** 2026-03-20  
 **Target:** 2026-03-21  
 **Total Tasks:** 3
@@ -14,9 +15,9 @@ Frontend enhancements for elimination flow: show eliminated player's role reveal
 
 ## Tasks
 
-### Pending ⏳
+### Completed ✅
 
-- [ ] **T4. Frontend: Elimination Result Modal**
+- [x] **T4. Frontend: Elimination Result Modal**
   - **Dependencies:** T1 (Backend: Enhanced Guess Result Payload)
   - **Effort:** M (3-4h)
   - **Files to Create/Modify:** `app/src/app/[roomId]/page.tsx`
@@ -31,7 +32,7 @@ Frontend enhancements for elimination flow: show eliminated player's role reveal
     - ✅ Shows "Points reset to 0" (if Blue Fish eliminated)
     - ✅ Modal auto-closes when round ends
 
-- [ ] **T5. Frontend: Temp Points Display**
+- [x] **T5. Frontend: Temp Points Display**
   - **Dependencies:** T2 (Backend: Temp Points Display in Room State)
   - **Effort:** S (2-3h)
   - **Files to Create/Modify:** `app/src/app/[roomId]/page.tsx`
@@ -43,7 +44,7 @@ Frontend enhancements for elimination flow: show eliminated player's role reveal
     - ✅ Clear visual indicator (prominent badge or counter)
     - ✅ Shows "+1" animation when points increase (optional polish)
 
-- [ ] **T6. Frontend: Round End Score Summary**
+- [x] **T6. Frontend: Round End Score Summary**
   - **Dependencies:** T3 (Backend: Round End Points Summary)
   - **Effort:** M (3-4h)
   - **Files to Create/Modify:** `app/src/app/[roomId]/page.tsx`

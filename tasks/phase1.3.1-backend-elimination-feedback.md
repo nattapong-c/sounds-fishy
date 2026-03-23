@@ -1,7 +1,8 @@
 # Phase 1.3.1 Backend: Elimination Feedback & Score Display
 
-**Status:** ⏳ Not Started  
-**Created:** 2026-03-20  
+**Status:** ✅ Completed
+**Created:** 2026-03-20
+**Updated:** 2026-03-23  
 **Target:** 2026-03-21  
 **Total Tasks:** 3
 
@@ -13,9 +14,9 @@ Backend enhancements for elimination flow: reveal eliminated player's role, allo
 
 ## Tasks
 
-### Pending ⏳
+### Completed ✅
 
-- [ ] **T1. Backend: Enhanced Guess Result Payload**
+- [x] **T1. Backend: Enhanced Guess Result Payload**
   - **Dependencies:** None
   - **Effort:** S (1h)
   - **Files to Create/Modify:** `service/src/controllers/ws-controller.ts`
@@ -27,7 +28,7 @@ Backend enhancements for elimination flow: reveal eliminated player's role, allo
     - ✅ Broadcast includes `pointsAwarded` (if round ended)
     - ✅ Frontend receives complete elimination result
 
-- [ ] **T2. Backend: Temp Points Display in Room State**
+- [x] **T2. Backend: Temp Points Display in Room State**
   - **Dependencies:** None
   - **Effort:** S (1h)
   - **Files to Create/Modify:** `service/src/models/room.ts`
@@ -37,7 +38,7 @@ Backend enhancements for elimination flow: reveal eliminated player's role, allo
     - ✅ Frontend can access temp points from room state
     - ✅ Temp points included in guess_submitted broadcast
 
-- [ ] **T3. Backend: Round End Points Summary**
+- [x] **T3. Backend: Round End Points Summary**
   - **Dependencies:** T1, T2
   - **Effort:** S (1-2h)
   - **Files to Create/Modify:** `service/src/controllers/ws-controller.ts`

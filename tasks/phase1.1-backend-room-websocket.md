@@ -1,8 +1,9 @@
 # Phase 1.1 Backend: Room Management & WebSocket
 
-**Status:** ⏳ Not Started  
-**Created:** 2026-03-20  
-**Target:** 2026-03-21  
+**Status:** ✅ Completed
+**Created:** 2026-03-20
+**Updated:** 2026-03-23
+**Target:** 2026-03-21
 **Total Tasks:** 6
 
 ## Overview
@@ -13,9 +14,9 @@ Backend foundation for room lifecycle management: create rooms, join/rejoin with
 
 ## Tasks
 
-### Pending ⏳
+### Completed ✅
 
-- [ ] **T1. Backend: Room Model & Schema**
+- [x] **T1. Backend: Room Model & Schema**
   - **Dependencies:** None
   - **Effort:** S (1-2h)
   - **Files to Create/Modify:** `service/src/models/room.ts`
@@ -27,7 +28,7 @@ Backend foundation for room lifecycle management: create rooms, join/rejoin with
     - ✅ TypeScript interface exported
     - ✅ Mongoose model compiles without errors
 
-- [ ] **T2. Backend: Create Room API Endpoint**
+- [x] **T2. Backend: Create Room API Endpoint**
   - **Dependencies:** T1
   - **Effort:** S (1-2h)
   - **Files to Create/Modify:** `service/src/controllers/room-controller.ts`, `service/src/index.ts`
@@ -39,7 +40,7 @@ Backend foundation for room lifecycle management: create rooms, join/rejoin with
     - ✅ Returns { roomId: string }
     - ✅ Handles duplicate roomId (retry on collision)
 
-- [ ] **T3. Backend: Join Room API Endpoint**
+- [x] **T3. Backend: Join Room API Endpoint**
   - **Dependencies:** T1, T2
   - **Effort:** M (3-4h)
   - **Files to Create/Modify:** `service/src/controllers/room-controller.ts`
@@ -52,7 +53,7 @@ Backend foundation for room lifecycle management: create rooms, join/rejoin with
     - ✅ Validates room exists (404 if not)
     - ✅ Validates room not full (400 if 8 players)
 
-- [ ] **T4. Backend: Leave Room API Endpoint**
+- [x] **T4. Backend: Leave Room API Endpoint**
   - **Dependencies:** T3
   - **Effort:** S (1-2h)
   - **Files to Create/Modify:** `service/src/controllers/room-controller.ts`
@@ -64,7 +65,7 @@ Backend foundation for room lifecycle management: create rooms, join/rejoin with
     - ✅ Deletes room if no players remain
     - ✅ Returns { success: true }
 
-- [ ] **T5. Backend: WebSocket Connection Handler**
+- [x] **T5. Backend: WebSocket Connection Handler**
   - **Dependencies:** T3
   - **Effort:** M (3-4h)
   - **Files to Create/Modify:** `service/src/controllers/ws-controller.ts`, `service/src/index.ts`
@@ -77,7 +78,7 @@ Backend foundation for room lifecycle management: create rooms, join/rejoin with
     - ✅ Broadcasts room_state_update to all players
     - ✅ Validates player exists in room
 
-- [ ] **T6. Backend: WebSocket Admin Actions**
+- [x] **T6. Backend: WebSocket Admin Actions**
   - **Dependencies:** T5
   - **Effort:** M (3-4h)
   - **Files to Create/Modify:** `service/src/controllers/ws-controller.ts`
