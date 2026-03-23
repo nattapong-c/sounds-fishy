@@ -58,6 +58,7 @@ export interface IRoom extends Document {
         winner: 'guesser' | 'blueFish' | 'redFish';
         pointsAwarded: number;
     }>;
+    expiresAt?: Date; // Room expiration time (12 hours after creation)
     createdAt: Date;
     updatedAt: Date;
     // Instance methods
@@ -138,6 +139,19 @@ export const RoomSchema = new Schema<IRoom>({
 // Index for deviceId lookups (for reconnection)
 RoomSchema.index({ 'players.deviceId': 1 });
 
+// TTL Index - automatically delete rooms after 12 hours (43200 seconds)
+// MongoDB will automatically remove expired documents
+RoomSchema.index({ createdAt: 1 }, { expireAfterSeconds: 43200 }); // 12 hours = 43200 seconds
+
+// Pre-save hook to set expiresAt
+RoomSchema.pre('save', function(next) {
+    if (this.isNew) {
+        // Set expiration time for new rooms (12 hours from now)
+        this.expiresAt = new Date(Date.now() + 43200000); // 12 hours in milliseconds
+    }
+    next();
+});
+
 // Add toJSON method to convert Map to object
 RoomSchema.methods.toJSON = function() {
     const obj = this.toObject();
@@ -151,6 +165,10 @@ RoomSchema.methods.toJSON = function() {
     }
     // Ensure currentTempPoints is always included
     obj.currentTempPoints = obj.currentTempPoints || 0;
+    // Include expiresAt for debugging/logging
+    if (obj.expiresAt) {
+        obj.expiresAt = obj.expiresAt.toISOString();
+    }
     return obj;
 };
 

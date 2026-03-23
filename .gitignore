@@ -58,3 +58,9 @@ data/
 # Misc
 .vercel
 *.tgz
+
+# ESLint configuration (auto-generated)
+app/.eslintrc.json
+
+# TypeScript build info (auto-generated)
+app/tsconfig.tsbuildinfo
