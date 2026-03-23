@@ -24,6 +24,22 @@ export default function RoomPage() {
     const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [rankings, setRankings] = useState<Array<{ position: number; playerId: string; playerName: string; totalPoints: number; isTied: boolean }>>([]);
+    const [showEliminationModal, setShowEliminationModal] = useState(false);
+    const [eliminationResult, setEliminationResult] = useState<{
+        eliminatedPlayerName: string;
+        eliminatedPlayerRole: GameRole | null;
+        isCorrect: boolean;
+        tempPoints: number;
+        isRoundOver: boolean;
+        pointsAwarded: number;
+    } | null>(null);
+    const [pointsBreakdown, setPointsBreakdown] = useState<Array<{
+        playerId: string;
+        playerName: string;
+        pointsEarned: number;
+        reason: string;
+        totalPoints: number;
+    }>>([]);
     const wsRef = useRef<WebSocket | null>(null);
 
     // Connect to WebSocket
@@ -54,13 +70,32 @@ export default function RoomPage() {
                 // Handle different message types
                 switch (message.type) {
                     case 'room_state_update':
+                        setRoomState(message.room);
+                        break;
                     case 'guess_submitted':
                         setRoomState(message.room);
-                        if (message.type === 'guess_submitted') {
-                            setShowEliminationView(false);
-                            setSelectedPlayerId(null);
-                            setShowConfirmModal(false);
+
+                        // Handle elimination result
+                        if (message.eliminatedPlayerName && message.eliminatedPlayerRole !== undefined) {
+                            setEliminationResult({
+                                eliminatedPlayerName: message.eliminatedPlayerName,
+                                eliminatedPlayerRole: message.eliminatedPlayerRole,
+                                isCorrect: message.isCorrect,
+                                tempPoints: message.tempPoints || 0,
+                                isRoundOver: message.isRoundOver,
+                                pointsAwarded: message.pointsAwarded || 0
+                            });
+                            setShowEliminationModal(true);
+
+                            // If round is over, show points breakdown
+                            if (message.isRoundOver && message.pointsBreakdown) {
+                                setPointsBreakdown(message.pointsBreakdown);
+                            }
                         }
+
+                        setShowEliminationView(false);
+                        setSelectedPlayerId(null);
+                        setShowConfirmModal(false);
                         break;
                     case 'game_started':
                         // Handle role-specific game start data
@@ -373,9 +408,125 @@ export default function RoomPage() {
     const currentPlayer = roomState?.players?.find((p: any) => p.deviceId === deviceId);
     const isAdmin = currentPlayer?.isAdmin;
 
+    // Elimination Modal Component
+    const EliminationModal = () => {
+        if (!eliminationResult) return null;
+
+        const { eliminatedPlayerName, eliminatedPlayerRole, isCorrect, tempPoints, isRoundOver, pointsAwarded } = eliminationResult;
+
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+                <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full transform transition-all scale-100">
+                    {/* Role Icon */}
+                    <div className="text-center mb-6">
+                        <div className="text-7xl mb-4">
+                            {eliminatedPlayerRole === 'redFish' ? '🐠' : '🐟'}
+                        </div>
+                        <h2 className="text-3xl font-bold mb-2">
+                            {isCorrect ? '🎉 Correct!' : '❌ Wrong!'}
+                        </h2>
+                        <p className="text-gray-600 text-lg">
+                            {eliminatedPlayerName} was{' '}
+                            <span className={`font-bold ${
+                                eliminatedPlayerRole === 'blueFish' ? 'text-blue-600' : 'text-red-500'
+                            }`}>
+                                {eliminatedPlayerRole === 'blueFish' ? 'Blue Fish' : 'Red Fish'}
+                            </span>
+                        </p>
+                    </div>
+
+                    {/* Points Display */}
+                    <div className="bg-gray-50 rounded-2xl p-6 mb-6">
+                        {isCorrect ? (
+                            <>
+                                <p className="text-green-600 font-bold text-xl mb-2">
+                                    +{tempPoints} Temp Point{tempPoints !== 1 ? 's' : ''}
+                                </p>
+                                <p className="text-gray-600">
+                                    {isRoundOver 
+                                        ? `Round Over! ${pointsAwarded} points awarded!` 
+                                        : 'Keep eliminating Red Fish!'}
+                                </p>
+                            </>
+                        ) : (
+                            <>
+                                <p className="text-red-600 font-bold text-xl mb-2">
+                                    Points Reset to 0
+                                </p>
+                                <p className="text-gray-600">
+                                    Blue Fish eliminated - Round Over!
+                                </p>
+                            </>
+                        )}
+                    </div>
+
+                    {/* Continue Button */}
+                    {!isRoundOver && (
+                        <button
+                            onClick={() => setShowEliminationModal(false)}
+                            className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-xl font-bold py-4 rounded-xl transition-all"
+                        >
+                            Continue Eliminating
+                        </button>
+                    )}
+
+                    {/* Round Over Message */}
+                    {isRoundOver && (
+                        <p className="text-center text-gray-500">
+                            Showing points breakdown...
+                        </p>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+    // Points Breakdown Component (for round end)
+    const PointsBreakdownView = () => {
+        if (pointsBreakdown.length === 0) return null;
+
+        return (
+            <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+                <h3 className="text-xl font-bold text-gray-800 mb-4 text-center">
+                    📊 Points Breakdown
+                </h3>
+                <div className="space-y-3">
+                    {pointsBreakdown.map((breakdown) => (
+                        <div
+                            key={breakdown.playerId}
+                            className={`flex items-center gap-4 p-4 rounded-xl border-2 ${
+                                breakdown.pointsEarned > 0
+                                    ? 'bg-green-50 border-green-300'
+                                    : 'bg-gray-50 border-gray-200'
+                            }`}
+                        >
+                            <div className="flex-1">
+                                <p className="font-bold text-gray-900">{breakdown.playerName}</p>
+                                <p className="text-sm text-gray-500">{breakdown.reason}</p>
+                            </div>
+                            <div className="text-right">
+                                {breakdown.pointsEarned > 0 && (
+                                    <p className="text-green-600 font-bold text-lg">
+                                        +{breakdown.pointsEarned}
+                                    </p>
+                                )}
+                                <p className="text-gray-600 font-medium">
+                                    {breakdown.totalPoints} total
+                                </p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    };
+
     // Show lobby view
     return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 p-4 md:p-8">
+            {/* Elimination Modal */}
+            {showEliminationModal && <EliminationModal />}
+
             {/* Header */}
             <header className="flex flex-col md:flex-row justify-between items-center mb-8 pb-4 gap-4 bg-white rounded-2xl shadow-lg p-4">
                 <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 bg-clip-text text-transparent">
@@ -496,6 +647,19 @@ export default function RoomPage() {
                                         <div className="text-5xl mb-4">🔍</div>
                                         <h3 className="text-2xl font-bold text-blue-800 mb-2">You are the GUESSER</h3>
                                         <p className="text-blue-600 mb-6">Listen to their stories and find the Red Fish!</p>
+
+                                        {/* Temp Points Display */}
+                                        <div className="bg-white rounded-xl p-4 mb-6 shadow-lg inline-block">
+                                            <p className="text-gray-500 text-xs uppercase mb-1">Temp Points</p>
+                                            <p className="text-4xl font-bold text-blue-600">
+                                                {roomState?.currentTempPoints || 0}
+                                            </p>
+                                            {(roomState?.currentTempPoints || 0) > 0 && (
+                                                <p className="text-green-600 text-sm mt-1">
+                                                    +{(roomState?.currentTempPoints || 0)} points
+                                                </p>
+                                            )}
+                                        </div>
 
                                         <div className="bg-white rounded-xl p-6 mb-6 shadow">
                                             <p className="text-gray-500 text-sm uppercase mb-2">Question</p>
@@ -636,12 +800,15 @@ export default function RoomPage() {
                             )}
                         </div>
                     ) : roomState?.status === 'round_end' ? (
-                        // Round End View
+                        // Round End View with Points Breakdown
                         <div className="flex-1 flex flex-col items-center justify-center text-center">
                             <div className="text-6xl mb-4">🎯</div>
                             <h2 className="text-2xl text-gray-700 mb-2 font-bold">Round Complete!</h2>
                             <p className="text-gray-500 mb-6">Points have been awarded</p>
-                            
+
+                            {/* Points Breakdown */}
+                            <PointsBreakdownView />
+
                             {isAdmin ? (
                                 <div className="flex gap-4">
                                     <button

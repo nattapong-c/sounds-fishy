@@ -142,6 +142,12 @@ RoomSchema.methods.toJSON = function() {
     if (obj.scores instanceof Map) {
         obj.scores = Object.fromEntries(obj.scores);
     }
+    // Convert fakeAnswersDistribution Map to plain object
+    if (obj.fakeAnswersDistribution instanceof Map) {
+        obj.fakeAnswersDistribution = Object.fromEntries(obj.fakeAnswersDistribution);
+    }
+    // Ensure currentTempPoints is always included
+    obj.currentTempPoints = obj.currentTempPoints || 0;
     return obj;
 };
 

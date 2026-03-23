@@ -70,11 +70,12 @@ export function awardRoundPoints(
 
 /**
  * Determine round winner based on elimination
+ * Returns 'ongoing' if game continues, otherwise the winner
  */
 export function determineRoundWinner(
     eliminatedPlayerRole: 'blueFish' | 'redFish',
     remainingRedFishCount: number
-): 'guesser' | 'blueFish' | 'redFish' {
+): 'guesser' | 'blueFish' | 'redFish' | 'ongoing' {
     if (eliminatedPlayerRole === 'redFish') {
         if (remainingRedFishCount === 0) {
             // All Red Fish eliminated - Guesser wins
@@ -128,6 +129,77 @@ export interface PlayerRanking {
     playerName: string;
     totalPoints: number;
     isTied: boolean;
+}
+
+/**
+ * Points breakdown for a single player at round end
+ */
+export interface PointsBreakdown {
+    playerId: string;
+    playerName: string;
+    pointsEarned: number;
+    reason: string;
+    totalPoints: number;
+}
+
+/**
+ * Generate points breakdown for all players at round end
+ */
+export function generatePointsBreakdown(
+    players: Array<{ id: string; name: string; inGameRole?: string | null }>,
+    scores: Map<string, { totalPoints: number; tempPoints: number; roundsAsGuesser: number; roundsAsBlueFish: number; roundsAsRedFish: number }>,
+    winner: 'guesser' | 'blueFish' | 'redFish',
+    tempPoints: number
+): PointsBreakdown[] {
+    const breakdown: PointsBreakdown[] = [];
+
+    players.forEach(player => {
+        const score = scores.get(player.id);
+        const currentTotal = score?.totalPoints || 0;
+        const previousTotal = currentTotal;
+
+        let pointsEarned = 0;
+        let reason = '';
+
+        if (player.inGameRole === 'guesser') {
+            if (winner === 'guesser') {
+                pointsEarned = tempPoints;
+                reason = `Guesser: ${tempPoints} temp point${tempPoints !== 1 ? 's' : ''} converted`;
+            } else {
+                pointsEarned = 0;
+                reason = 'Guesser: Wrong guess, points reset';
+            }
+        } else if (player.inGameRole === 'blueFish') {
+            if (winner === 'guesser') {
+                pointsEarned = 1;
+                reason = 'Blue Fish: 1 survival bonus';
+            } else {
+                pointsEarned = 0;
+                reason = 'Blue Fish: Eliminated (no points)';
+            }
+        } else if (player.inGameRole === 'redFish') {
+            if (winner === 'guesser') {
+                pointsEarned = 0;
+                reason = 'Red Fish: Eliminated (no points)';
+            } else {
+                pointsEarned = 1;
+                reason = 'Red Fish: 1 survival bonus';
+            }
+        }
+
+        breakdown.push({
+            playerId: player.id,
+            playerName: player.name,
+            pointsEarned,
+            reason,
+            totalPoints: currentTotal
+        });
+    });
+
+    // Sort by points earned (descending)
+    breakdown.sort((a, b) => b.pointsEarned - a.pointsEarned);
+
+    return breakdown;
 }
 
 export function calculateRankings(
