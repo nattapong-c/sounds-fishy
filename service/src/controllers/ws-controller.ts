@@ -356,7 +356,9 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                         type: 'round_started',
                         round: room.currentRound,
                         room: room.toJSON(),
-                        playerDataMap
+                        playerDataMap,
+                        // Include points breakdown if round just ended
+                        pointsBreakdown: (room as any).getPointsBreakdown()
                     };
 
                     ws.publish(`room:${roomId}`, JSON.stringify(payload));
@@ -404,6 +406,30 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                 }
 
                 /**
+                 * Room State Update (send current state with points/rankings if applicable)
+                 */
+                else if (parsedMessage.type === 'get_room_state') {
+                    // Send room state with points breakdown or rankings if applicable
+                    const roomData = room.toJSON();
+                    const responseData: any = {
+                        type: 'room_state_update',
+                        room: roomData
+                    };
+
+                    // Add points breakdown if in round_end state
+                    if (room.status === 'round_end') {
+                        responseData.pointsBreakdown = (room as any).getPointsBreakdown();
+                    }
+
+                    // Add rankings if in completed state
+                    if (room.status === 'completed') {
+                        responseData.rankings = (room as any).getRankings();
+                    }
+
+                    ws.send(JSON.stringify(responseData));
+                }
+
+                /**
                  * Kick Player
                  */
                 else if (parsedMessage.type === 'kick_player') {
@@ -435,6 +461,32 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                     ws.publish(`room:${roomId}`, updatePayload);
                     ws.send(updatePayload);
                 }
+            }
+
+            /**
+             * Room State Update (send current state with points/rankings if applicable)
+             * Available to ALL players (not just admin)
+             */
+            if (parsedMessage.type === 'get_room_state') {
+                // Send room state with points breakdown or rankings if applicable
+                const roomData = room.toJSON();
+                const responseData: any = {
+                    type: 'room_state_update',
+                    room: roomData
+                };
+
+                // Add points breakdown if in round_end state
+                if (room.status === 'round_end') {
+                    responseData.pointsBreakdown = (room as any).getPointsBreakdown();
+                }
+
+                // Add rankings if in completed state
+                if (room.status === 'completed') {
+                    responseData.rankings = (room as any).getRankings();
+                }
+
+                ws.send(JSON.stringify(responseData));
+                logger.info({ roomId, deviceId, status: room.status }, 'Sent room state with points/rankings');
             }
 
             /**

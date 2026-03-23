@@ -54,9 +54,14 @@ export default function RoomPage() {
 
         ws.onopen = () => {
             console.log('WebSocket connected');
-            // After connecting, fetch latest room state
+            // Store WebSocket reference
+            wsRef.current = ws;
+            
+            // After connecting, fetch latest room state with points/rankings
             api.rooms.get(roomId).then(response => {
                 setRoomState(response.room);
+                // Request full room state with points breakdown or rankings
+                ws.send(JSON.stringify({ type: 'get_room_state' }));
             }).catch(err => {
                 console.error('Failed to fetch room state after WS connect:', err);
             });
@@ -71,6 +76,13 @@ export default function RoomPage() {
                 switch (message.type) {
                     case 'room_state_update':
                         setRoomState(message.room);
+                        // Handle points breakdown and rankings from room state
+                        if (message.pointsBreakdown) {
+                            setPointsBreakdown(message.pointsBreakdown);
+                        }
+                        if (message.rankings) {
+                            setRankings(message.rankings);
+                        }
                         break;
                     case 'guess_submitted':
                         setRoomState(message.room);
@@ -140,6 +152,10 @@ export default function RoomPage() {
                         break;
                     case 'round_started':
                         setRoomState(message.room);
+                        // Handle points breakdown from previous round
+                        if (message.pointsBreakdown) {
+                            setPointsBreakdown(message.pointsBreakdown);
+                        }
                         // Handle role-specific data for new round
                         if (message.role) {
                             // Reconnection: direct properties

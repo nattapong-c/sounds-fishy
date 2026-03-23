@@ -60,6 +60,9 @@ export interface IRoom extends Document {
     }>;
     createdAt: Date;
     updatedAt: Date;
+    // Instance methods
+    getPointsBreakdown(): any[] | null;
+    getRankings(): any[];
 }
 
 export const RoomSchema = new Schema<IRoom>({
@@ -149,6 +152,39 @@ RoomSchema.methods.toJSON = function() {
     // Ensure currentTempPoints is always included
     obj.currentTempPoints = obj.currentTempPoints || 0;
     return obj;
+};
+
+/**
+ * Get points breakdown for current round (if round ended)
+ */
+RoomSchema.methods.getPointsBreakdown = function() {
+    if (this.status !== 'round_end' || !this.scores) {
+        return null;
+    }
+    
+    const { generatePointsBreakdown } = require('../game/scoring');
+    const winner = this.eliminatedPlayers?.length === this.players.filter((p: any) => p.inGameRole === 'redFish').length 
+        ? 'guesser' 
+        : 'redFish';
+    
+    return generatePointsBreakdown(
+        this.players,
+        this.scores,
+        winner,
+        this.currentTempPoints || 0
+    );
+};
+
+/**
+ * Get rankings from scores
+ */
+RoomSchema.methods.getRankings = function() {
+    if (!this.scores) {
+        return [];
+    }
+    
+    const { calculateRankings } = require('../game/scoring');
+    return calculateRankings(this.players, this.scores);
 };
 
 /**
