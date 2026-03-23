@@ -223,10 +223,10 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                 }
 
                 /**
-                 * End Round (Admin forces end)
+                 * End Round (Admin forces end - resets ALL scores and returns to lobby)
                  */
                 else if (parsedMessage.type === 'end_round') {
-                    logger.info({ roomId, deviceId }, 'Admin ended the round');
+                    logger.info({ roomId, deviceId }, 'Admin ended the round (reset all scores)');
 
                     room.status = 'lobby';
                     room.players.forEach(p => {
@@ -236,6 +236,10 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                     room.correctAnswer = null;
                     room.eliminatedPlayers = [];
                     room.currentTempPoints = 0;
+                    room.scores = new Map(); // Clear all accumulated scores
+                    room.gameHistory = []; // Clear game history
+                    room.currentRound = 1; // Reset round counter
+                    room.lastGuesserId = null; // Reset Guesser tracking
                     await room.save();
 
                     const updatePayload = JSON.stringify({
@@ -406,6 +410,43 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                 }
 
                 /**
+                 * Reset Lobby (Admin resets all scores and returns to lobby)
+                 */
+                else if (parsedMessage.type === 'reset_lobby') {
+                    // Validate admin
+                    if (!player.isAdmin) {
+                        ws.send(JSON.stringify({
+                            type: 'error',
+                            message: 'Only admin can reset lobby'
+                        }));
+                        return;
+                    }
+
+                    logger.info({ roomId, deviceId }, 'Admin reset lobby (cleared all scores)');
+
+                    room.status = 'lobby';
+                    room.players.forEach(p => {
+                        p.inGameRole = null;
+                    });
+                    room.question = null;
+                    room.correctAnswer = null;
+                    room.eliminatedPlayers = [];
+                    room.currentTempPoints = 0;
+                    room.scores = new Map(); // Clear all accumulated scores
+                    room.gameHistory = []; // Clear game history
+                    room.currentRound = 1; // Reset round counter
+                    room.lastGuesserId = null; // Reset Guesser tracking
+                    await room.save();
+
+                    const updatePayload = JSON.stringify({
+                        type: 'lobby_reset',
+                        room: room.toJSON()
+                    });
+                    ws.publish(`room:${roomId}`, updatePayload);
+                    ws.send(updatePayload);
+                }
+
+                /**
                  * Room State Update (send current state with points/rankings if applicable)
                  */
                 else if (parsedMessage.type === 'get_room_state') {
@@ -562,6 +603,19 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                     room.scores = new Map();
                 }
 
+                // Initialize score entries for all players if not exists
+                room.players.forEach(player => {
+                    if (!room.scores!.has(player.id)) {
+                        room.scores!.set(player.id, {
+                            totalPoints: 0,
+                            tempPoints: 0,
+                            roundsAsGuesser: 0,
+                            roundsAsBlueFish: 0,
+                            roundsAsRedFish: 0
+                        });
+                    }
+                });
+
                 if (winner === 'guesser' || winner === 'redFish') {
                     // Round ended - award points
                     const guesserId = room.players.find(p => p.inGameRole === 'guesser')?.id;
@@ -569,7 +623,16 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                     const redFishIds = room.players.filter(p => p.inGameRole === 'redFish').map(p => p.id);
 
                     if (guesserId && blueFishId) {
-                        awardRoundPoints(room.scores, guesserId, blueFishId, redFishIds, winner, room.currentTempPoints || 0);
+                        // Pass eliminatedRedFishIds so only surviving Red Fish get points
+                        awardRoundPoints(
+                            room.scores,
+                            guesserId,
+                            blueFishId,
+                            redFishIds,
+                            winner,
+                            room.currentTempPoints || 0,
+                            room.eliminatedPlayers?.filter(id => redFishIds.includes(id)) // Only Red Fish who were eliminated
+                        );
 
                         // Update role counts
                         updateRoleCounts(room.scores, guesserId, blueFishId, redFishIds);
@@ -604,11 +667,16 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                 // Add points breakdown if round ended
                 if (room.status === 'round_end' && (winner === 'guesser' || winner === 'redFish')) {
                     const scores = room.scores || new Map();
+                    // Filter to get only eliminated Red Fish
+                    const eliminatedRedFishIds = room.eliminatedPlayers?.filter(id => 
+                        room.players.find(p => p.id === id)?.inGameRole === 'redFish'
+                    );
                     eliminationPayload.pointsBreakdown = generatePointsBreakdown(
                         room.players,
                         scores,
                         winner,
-                        room.currentTempPoints || 0
+                        room.currentTempPoints || 0,
+                        eliminatedRedFishIds
                     );
                 }
 

@@ -197,6 +197,15 @@ export default function RoomPage() {
                             setRankings(message.rankings);
                         }
                         break;
+                    case 'lobby_reset':
+                        setRoomState(message.room);
+                        setRankings([]);
+                        setPointsBreakdown([]);
+                        setMyRole(null);
+                        setMyQuestion('');
+                        setMyAnswer('');
+                        setMyLieSuggestion('');
+                        break;
                     case 'error':
                         console.error('WebSocket error:', message.message);
                         setError(message.message);
@@ -288,11 +297,11 @@ export default function RoomPage() {
         }
     };
 
-    // Handle go back to lobby (admin only, after game end)
-    const handleGoToLobby = async () => {
+    // Handle go back to lobby (admin only, after game end - resets all scores)
+    const handleGoToLobby = () => {
         if (wsRef.current?.readyState === WebSocket.OPEN) {
             wsRef.current.send(JSON.stringify({
-                type: 'end_round'
+                type: 'reset_lobby'
             }));
         }
         setRankings([]);

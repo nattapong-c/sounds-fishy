@@ -36,9 +36,10 @@ export function awardRoundPoints(
     blueFishId: string,
     redFishIds: string[],
     winner: 'guesser' | 'blueFish' | 'redFish',
-    tempPoints: number
+    tempPoints: number,
+    eliminatedRedFishIds?: string[] // Red Fish who were eliminated before Blue Fish
 ): void {
-    logger.info({ guesserId, blueFishId, redFishIds, winner, tempPoints }, 'Awarding round points');
+    logger.info({ guesserId, blueFishId, redFishIds, winner, tempPoints, eliminatedRedFishIds }, 'Awarding round points');
 
     if (winner === 'guesser') {
         // Guesser eliminated all Red Fish correctly
@@ -57,12 +58,21 @@ export function awardRoundPoints(
         }
     } else if (winner === 'blueFish' || winner === 'redFish') {
         // Guesser picked Blue Fish (wrong guess)
-        // Remaining Red Fish each get 1 point
+        // Only NON-eliminated Red Fish get 1 point (survival bonus)
+        const eliminatedSet = new Set(eliminatedRedFishIds || []);
+        
         redFishIds.forEach(redFishId => {
+            // Skip Red Fish who were already eliminated
+            if (eliminatedSet.has(redFishId)) {
+                logger.info({ redFishId, pointsAwarded: 0 }, 'Red Fish already eliminated, no points');
+                return;
+            }
+            
+            // Award point to surviving Red Fish
             const redFishScore = scores.get(redFishId);
             if (redFishScore) {
                 redFishScore.totalPoints += 1;
-                logger.info({ redFishId, pointsAwarded: 1 }, 'Red Fish awarded point for Guesser mistake');
+                logger.info({ redFishId, pointsAwarded: 1 }, 'Red Fish awarded survival bonus point');
             }
         });
     }
@@ -149,14 +159,15 @@ export function generatePointsBreakdown(
     players: Array<{ id: string; name: string; inGameRole?: string | null }>,
     scores: Map<string, { totalPoints: number; tempPoints: number; roundsAsGuesser: number; roundsAsBlueFish: number; roundsAsRedFish: number }>,
     winner: 'guesser' | 'blueFish' | 'redFish',
-    tempPoints: number
+    tempPoints: number,
+    eliminatedRedFishIds?: string[] // Red Fish who were eliminated before Blue Fish
 ): PointsBreakdown[] {
     const breakdown: PointsBreakdown[] = [];
+    const eliminatedSet = new Set(eliminatedRedFishIds || []);
 
     players.forEach(player => {
         const score = scores.get(player.id);
         const currentTotal = score?.totalPoints || 0;
-        const previousTotal = currentTotal;
 
         let pointsEarned = 0;
         let reason = '';
@@ -182,8 +193,14 @@ export function generatePointsBreakdown(
                 pointsEarned = 0;
                 reason = 'Red Fish: Eliminated (no points)';
             } else {
-                pointsEarned = 1;
-                reason = 'Red Fish: 1 survival bonus';
+                // Blue Fish eliminated - check if this Red Fish survived
+                if (eliminatedSet.has(player.id)) {
+                    pointsEarned = 0;
+                    reason = 'Red Fish: Eliminated before Blue Fish (no points)';
+                } else {
+                    pointsEarned = 1;
+                    reason = 'Red Fish: 1 survival bonus (Blue Fish eliminated)';
+                }
             }
         }
 
@@ -196,8 +213,13 @@ export function generatePointsBreakdown(
         });
     });
 
-    // Sort by points earned (descending)
-    breakdown.sort((a, b) => b.pointsEarned - a.pointsEarned);
+    // Sort by points earned (descending), then by total points
+    breakdown.sort((a, b) => {
+        if (b.pointsEarned !== a.pointsEarned) {
+            return b.pointsEarned - a.pointsEarned;
+        }
+        return b.totalPoints - a.totalPoints;
+    });
 
     return breakdown;
 }
