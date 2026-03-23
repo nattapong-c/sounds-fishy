@@ -692,21 +692,40 @@ export default function RoomPage() {
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 {roomState?.players
                                                     .filter((p: any) => p.deviceId !== deviceId)
-                                                    .map((player: any) => (
-                                                        <button
-                                                            key={player.id}
-                                                            onClick={() => handleSelectPlayer(player.id)}
-                                                            className="p-4 border-2 border-gray-200 rounded-xl hover:border-red-300 hover:bg-red-50 transition-all text-left"
-                                                        >
-                                                            <div className="flex items-center gap-3">
-                                                                <span className="text-2xl">🎯</span>
-                                                                <div>
-                                                                    <p className="font-semibold text-gray-900">{player.name}</p>
-                                                                    <p className="text-sm text-gray-500">Click to eliminate</p>
+                                                    .map((player: any) => {
+                                                        const isEliminated = roomState?.eliminatedPlayers?.includes(player.id);
+                                                        
+                                                        return (
+                                                            <button
+                                                                key={player.id}
+                                                                onClick={() => !isEliminated && handleSelectPlayer(player.id)}
+                                                                disabled={isEliminated}
+                                                                className={`p-4 border-2 rounded-xl transition-all text-left ${
+                                                                    isEliminated
+                                                                        ? 'bg-gray-100 border-gray-300 opacity-50 cursor-not-allowed'
+                                                                        : 'border-gray-200 hover:border-red-300 hover:bg-red-50'
+                                                                }`}
+                                                            >
+                                                                <div className="flex items-center gap-3">
+                                                                    <span className="text-2xl">
+                                                                        {isEliminated ? '❌' : '🎯'}
+                                                                    </span>
+                                                                    <div className="flex-1">
+                                                                        <p className={`font-semibold ${
+                                                                            isEliminated ? 'text-gray-500' : 'text-gray-900'
+                                                                        }`}>{player.name}</p>
+                                                                        <p className="text-sm">
+                                                                            {isEliminated ? (
+                                                                                <span className="text-red-500 font-medium">Eliminated</span>
+                                                                            ) : (
+                                                                                <span className="text-gray-500">Click to eliminate</span>
+                                                                            )}
+                                                                        </p>
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                        </button>
-                                                    ))}
+                                                            </button>
+                                                        );
+                                                    })}
                                             </div>
                                             <button
                                                 onClick={() => setShowEliminationView(false)}
