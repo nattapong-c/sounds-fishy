@@ -836,24 +836,25 @@ export default function RoomPage() {
                                     <div className="text-5xl mb-4">🐠</div>
                                     <h3 className="text-2xl font-bold text-red-800 mb-2">You are a RED FISH</h3>
                                     <p className="text-red-600 mb-6">Tell a convincing lie!</p>
-                                    
+
                                     <div className="bg-white rounded-xl p-6 mb-6 shadow">
                                         <p className="text-gray-500 text-sm uppercase mb-2">Question</p>
                                         <p className="text-xl font-bold text-gray-900 mb-4">{myQuestion}</p>
-                                        
+
                                         <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4 mb-4">
                                             <p className="text-red-600 text-sm font-bold uppercase mb-1">🎯 YOUR ANSWER (Must Say This!)</p>
                                             <p className="text-lg font-semibold text-gray-900">{myAnswer}</p>
                                         </div>
-                                        
+
                                         {myLieSuggestion && (
-                                            <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
-                                                <p className="text-yellow-600 text-sm font-bold uppercase mb-1">💡 Hint (For Inspiration)</p>
-                                                <p className="text-gray-700">{myLieSuggestion}</p>
+                                            <div className="bg-gradient-to-r from-yellow-50 to-amber-50 border-2 border-yellow-400 rounded-lg p-4">
+                                                <p className="text-yellow-700 text-sm font-bold uppercase mb-2">💡 Story Suggestion</p>
+                                                <p className="text-gray-800 text-base italic">"{myLieSuggestion}"</p>
+                                                <p className="text-gray-500 text-xs mt-2">Use this hint to tell a convincing story!</p>
                                             </div>
                                         )}
                                     </div>
-                                    
+
                                     <p className="text-gray-600 text-sm">
                                         You <span className="font-semibold text-red-600">MUST</span> use your assigned answer.
                                         Make it convincing so the Guesser doesn't pick you!

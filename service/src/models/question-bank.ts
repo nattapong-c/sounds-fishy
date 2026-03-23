@@ -1,13 +1,21 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 /**
+ * Fake Answer with Lie Hint
+ */
+export interface IFakeAnswer {
+    answer: string;
+    hint: string;
+}
+
+/**
  * Question Bank Document
  * Stores questions with correct and fake answers for Sounds Fishy game
  */
 export interface IQuestionBank extends Document {
     question: string;
     correctAnswer: string;
-    fakeAnswers: string[];
+    fakeAnswers: IFakeAnswer[];
     category?: string;
     language?: 'english' | 'thai';
     difficulty?: 'easy' | 'medium' | 'hard';
@@ -26,11 +34,22 @@ const QuestionBankSchema = new Schema<IQuestionBank>({
         required: true,
         trim: true 
     },
-    fakeAnswers: { 
-        type: [String], 
+    fakeAnswers: {
+        type: [{
+            answer: {
+                type: String,
+                required: true,
+                trim: true
+            },
+            hint: {
+                type: String,
+                required: true,
+                trim: true
+            }
+        }],
         required: true,
         validate: {
-            validator: (answers: string[]) => answers.length >= 3,
+            validator: (answers: Array<{answer: string, hint: string}>) => answers.length >= 3,
             message: 'At least 3 fake answers required'
         }
     },

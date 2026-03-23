@@ -67,11 +67,12 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                 if (player.inGameRole === 'blueFish') {
                     payload.correctAnswer = room.correctAnswer;
                 } else if (player.inGameRole === 'redFish' && room.fakeAnswersDistribution) {
-                    const fakeAnswer = room.fakeAnswersDistribution.get(player.id);
-                    const lieSuggestion = room.players
-                        .filter((p: any) => p.inGameRole === 'redFish' && p.id !== player.id)
-                        .map((p: any) => room.fakeAnswersDistribution?.get(p.id))
-                        .find(a => a !== fakeAnswer) || fakeAnswer;
+                    const fakeAnswerObj = room.fakeAnswersDistribution.get(player.id);
+                    const fakeAnswer = fakeAnswerObj?.answer || '';
+                    // Get lie suggestion from another Red Fish
+                    const lieSuggestion = Array.from(room.fakeAnswersDistribution.values())
+                        .map(fa => fa.hint)
+                        .find(hint => hint !== fakeAnswerObj?.hint) || fakeAnswerObj?.hint || '';
                     payload.fakeAnswer = fakeAnswer;
                     payload.lieSuggestion = lieSuggestion;
                 }
@@ -155,7 +156,7 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                     room.currentTempPoints = 0;
 
                     // Distribute fake answers to Red Fish (each gets unique one)
-                    const fakeAnswersDistribution = new Map<string, string>();
+                    const fakeAnswersDistribution = new Map<string, {answer: string, hint: string}>();
                     const shuffledFakes = [...questionData.fakeAnswers].sort(() => 0.5 - Math.random());
                     roleAssignment.redFishIds.forEach((playerId, index) => {
                         const fakeAnswer = shuffledFakes[index % shuffledFakes.length];
@@ -196,11 +197,12 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                     // Red Fish data (reuse shuffledFakes from above)
                     roleAssignment.redFishIds.forEach((playerId, index) => {
                         const fakeAnswer = shuffledFakes[index % shuffledFakes.length];
-                        const lieSuggestion = questionData.fakeAnswers.find(a => a !== fakeAnswer) || shuffledFakes[0];
+                        // Get a hint from another Red Fish's answer (for lie suggestion)
+                        const lieSuggestion = shuffledFakes[(index + 1) % shuffledFakes.length]?.hint || fakeAnswer.hint;
                         playerDataMap[playerId] = {
                             role: 'redFish',
                             question: room.question!,
-                            fakeAnswer,
+                            fakeAnswer: fakeAnswer.answer,
                             lieSuggestion
                         };
                     });
@@ -315,7 +317,7 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                     room.correctAnswer = questionData.correctAnswer;
 
                     // Distribute fake answers to Red Fish
-                    const fakeAnswersDistribution = new Map<string, string>();
+                    const fakeAnswersDistribution = new Map<string, {answer: string, hint: string}>();
                     const shuffledFakes = [...questionData.fakeAnswers].sort(() => 0.5 - Math.random());
                     roleAssignment.redFishIds.forEach((playerId, index) => {
                         const fakeAnswer = shuffledFakes[index % shuffledFakes.length];
@@ -347,11 +349,12 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
 
                     roleAssignment.redFishIds.forEach((playerId, index) => {
                         const fakeAnswer = shuffledFakes[index % shuffledFakes.length];
-                        const lieSuggestion = questionData.fakeAnswers.find(a => a !== fakeAnswer) || shuffledFakes[0];
+                        // Get a hint from another Red Fish's answer (for lie suggestion)
+                        const lieSuggestion = shuffledFakes[(index + 1) % shuffledFakes.length]?.hint || fakeAnswer.hint;
                         playerDataMap[playerId] = {
                             role: 'redFish',
                             question: room.question!,
-                            fakeAnswer,
+                            fakeAnswer: fakeAnswer.answer,
                             lieSuggestion
                         };
                     });

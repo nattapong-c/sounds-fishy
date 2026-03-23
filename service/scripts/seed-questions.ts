@@ -2,228 +2,108 @@
 
 /**
  * Seed Question Bank Script
- * Populates MongoDB with initial questions for Sounds Fishy game
- * 
- * Usage: bun run scripts/seed-questions.ts
+ * Populates MongoDB with AI-generated questions for Sounds Fishy game
+ *
+ * Usage: 
+ *   # English questions
+ *   bun run scripts/seed-questions.ts                           # 10 English, general, medium
+ *   bun run scripts/seed-questions.ts 20                        # 20 English, general, medium
+ *   bun run scripts/seed-questions.ts --count 15                # 15 English, general, medium
+ *   bun run scripts/seed-questions.ts --category animals        # English, animals category
+ *   bun run scripts/seed-questions.ts --difficulty hard         # English, hard difficulty
+ *   bun run scripts/seed-questions.ts -c food -d easy -n 25     # 25 English, food, easy
+ *
+ *   # Thai questions
+ *   bun run scripts/seed-questions.ts --thai                    # 10 Thai, general, medium
+ *   bun run scripts/seed-questions.ts --thai --count 15         # 15 Thai, general, medium
+ *   bun run scripts/seed-questions.ts --thai -c animals -d hard # Thai, animals, hard
  */
 
 import mongoose from 'mongoose';
 import { QuestionBankModel } from '../src/models/question-bank';
 import { connectDB } from '../src/lib/db';
+import { generateQuestions } from '../src/services/ai-question-generator';
+import { aiConfig } from '../src/lib/ai-config';
 
-const questions = [
-    // Kitchen & Food
-    {
-        question: "What's something you might find in a kitchen?",
-        correctAnswer: "A spatula",
-        fakeAnswers: ["A toaster oven", "A cutting board", "A blender", "A whisk"],
-        category: "kitchen",
-        language: "english",
-        difficulty: "easy"
-    },
-    {
-        question: "What's a popular breakfast food?",
-        correctAnswer: "Pancakes",
-        fakeAnswers: ["Cereal", "Toast", "Oatmeal", "Eggs"],
-        category: "food",
-        language: "english",
-        difficulty: "easy"
-    },
-    {
-        question: "What's something you use to clean your teeth?",
-        correctAnswer: "A toothbrush",
-        fakeAnswers: ["Dental floss", "Mouthwash", "Toothpaste", "Water pick"],
-        category: "hygiene",
-        language: "english",
-        difficulty: "easy"
-    },
-    
-    // Animals
-    {
-        question: "What's an animal that lives in the ocean?",
-        correctAnswer: "A dolphin",
-        fakeAnswers: ["A shark", "A whale", "A seal", "A jellyfish"],
-        category: "animals",
-        language: "english",
-        difficulty: "easy"
-    },
-    {
-        question: "What's an animal that can fly?",
-        correctAnswer: "An eagle",
-        fakeAnswers: ["A bat", "A pigeon", "A parrot", "An owl"],
-        category: "animals",
-        language: "english",
-        difficulty: "easy"
-    },
-    {
-        question: "What's a farm animal?",
-        correctAnswer: "A cow",
-        fakeAnswers: ["A pig", "A sheep", "A chicken", "A horse"],
-        category: "animals",
-        language: "english",
-        difficulty: "easy"
-    },
-    
-    // Jobs & Professions
-    {
-        question: "What's a job where you help sick people?",
-        correctAnswer: "A doctor",
-        fakeAnswers: ["A nurse", "A pharmacist", "A therapist", "A paramedic"],
-        category: "jobs",
-        language: "english",
-        difficulty: "easy"
-    },
-    {
-        question: "What's a job where you cook food?",
-        correctAnswer: "A chef",
-        fakeAnswers: ["A cook", "A baker", "A line cook", "A sous chef"],
-        category: "jobs",
-        language: "english",
-        difficulty: "easy"
-    },
-    {
-        question: "What's a job where you teach students?",
-        correctAnswer: "A teacher",
-        fakeAnswers: ["A professor", "A tutor", "An instructor", "A principal"],
-        category: "jobs",
-        language: "english",
-        difficulty: "easy"
-    },
-    
-    // Objects & Places
-    {
-        question: "What's something you bring to the beach?",
-        correctAnswer: "A towel",
-        fakeAnswers: ["Sunscreen", "A swimsuit", "A beach umbrella", "Flip flops"],
-        category: "places",
-        language: "english",
-        difficulty: "medium"
-    },
-    {
-        question: "What's something you find in a classroom?",
-        correctAnswer: "A whiteboard",
-        fakeAnswers: ["Desks", "Chairs", "A projector", "A clock"],
-        category: "places",
-        language: "english",
-        difficulty: "easy"
-    },
-    {
-        question: "What's something you wear in winter?",
-        correctAnswer: "A coat",
-        fakeAnswers: ["A scarf", "Gloves", "A hat", "Boots"],
-        category: "clothing",
-        language: "english",
-        difficulty: "easy"
-    },
-    
-    // Activities & Hobbies
-    {
-        question: "What's a sport played with a ball?",
-        correctAnswer: "Soccer",
-        fakeAnswers: ["Basketball", "Tennis", "Volleyball", "Baseball"],
-        category: "sports",
-        language: "english",
-        difficulty: "easy"
-    },
-    {
-        question: "What's a musical instrument with strings?",
-        correctAnswer: "A guitar",
-        fakeAnswers: ["A violin", "A cello", "A harp", "A ukulele"],
-        category: "music",
-        language: "english",
-        difficulty: "medium"
-    },
-    {
-        question: "What's something you do at a concert?",
-        correctAnswer: "Listen to music",
-        fakeAnswers: ["Dance", "Sing along", "Clap", "Take photos"],
-        category: "activities",
-        language: "english",
-        difficulty: "medium"
-    },
-    
-    // Technology
-    {
-        question: "What's something you use to browse the internet?",
-        correctAnswer: "A web browser",
-        fakeAnswers: ["A computer", "A smartphone", "A tablet", "WiFi"],
-        category: "technology",
-        language: "english",
-        difficulty: "medium"
-    },
-    {
-        question: "What's a social media platform?",
-        correctAnswer: "Instagram",
-        fakeAnswers: ["Facebook", "Twitter", "TikTok", "LinkedIn"],
-        category: "technology",
-        language: "english",
-        difficulty: "easy"
-    },
-    
-    // Harder Questions
-    {
-        question: "What's a famous landmark in Paris?",
-        correctAnswer: "The Eiffel Tower",
-        fakeAnswers: ["The Louvre", "Notre-Dame", "The Arc de Triomphe", "Versailles"],
-        category: "travel",
-        language: "english",
-        difficulty: "medium"
-    },
-    {
-        question: "What's a type of pasta?",
-        correctAnswer: "Penne",
-        fakeAnswers: ["Fettuccine", "Rigatoni", "Linguine", "Farfalle"],
-        category: "food",
-        language: "english",
-        difficulty: "medium"
-    },
-    {
-        question: "What's a primary color?",
-        correctAnswer: "Blue",
-        fakeAnswers: ["Red", "Yellow", "Green", "Purple"],
-        category: "general",
-        language: "english",
-        difficulty: "easy"
-    },
-    
-    // Thai Questions (for future localization)
-    {
-        question: "อะไรคือสิ่งที่คุณพบในครัว?",
-        correctAnswer: "กระทะ",
-        fakeAnswers: ["หม้อ", "มีด", "ช้อน", "จาน"],
-        category: "kitchen",
-        language: "thai",
-        difficulty: "easy"
-    },
-    {
-        question: "สัตว์อะไรอาศัยอยู่ในทะเล?",
-        correctAnswer: "ปลาโลมา",
-        fakeAnswers: ["ปลาฉลาม", "ปลาวาฬ", "แมงกะพรุน", "ปลาหมึก"],
-        category: "animals",
-        language: "thai",
-        difficulty: "easy"
-    }
-];
+interface SeedOptions {
+    count: number;
+    language: 'english' | 'thai';
+    category?: string;
+    difficulty?: 'easy' | 'medium' | 'hard';
+}
 
-async function seedQuestions() {
+async function seedAIQuestions(options: SeedOptions) {
+    const { count, language, category, difficulty } = options;
+    
     try {
         console.log('🌱 Connecting to MongoDB...');
         await connectDB();
+
+        // Check if AI is configured
+        if (!aiConfig.enabled) {
+            console.error('❌ AI not configured. Please set GEMINI_API_KEY in .env file');
+            console.log('\n📝 Example .env file:');
+            console.log('   GEMINI_API_KEY=your_api_key_here');
+            console.log('   GEMINI_MODEL=gemini-2.5-flash');
+            process.exit(1);
+        }
+        console.log('✅ AI configured successfully');
+
+        // Get current question count
+        const currentCount = await QuestionBankModel.countDocuments();
+        console.log(`📊 Current questions in database: ${currentCount}`);
+
+        // Generate questions with AI
+        const langText = language === 'thai' ? 'Thai' : 'English';
+        const catText = category ? ` (${category})` : '';
+        const diffText = difficulty ? ` [${difficulty}]` : '';
+        console.log(`🤖 Generating ${count} ${langText}${catText}${diffText} questions with AI...`);
         
-        console.log('📝 Clearing existing questions...');
-        await QuestionBankModel.deleteMany({});
-        
-        console.log('📝 Inserting questions...');
-        const inserted = await QuestionBankModel.insertMany(questions);
-        
-        console.log(`✅ Successfully seeded ${inserted.length} questions!`);
-        console.log('\n📊 Breakdown:');
-        console.log(`   English: ${inserted.filter(q => q.language === 'english').length}`);
-        console.log(`   Thai: ${inserted.filter(q => q.language === 'thai').length}`);
-        console.log(`   Easy: ${inserted.filter(q => q.difficulty === 'easy').length}`);
-        console.log(`   Medium: ${inserted.filter(q => q.difficulty === 'medium').length}`);
-        console.log(`   Hard: ${inserted.filter(q => q.difficulty === 'hard').length}`);
-        
+        const generatedQuestions = await generateQuestions(count, category, difficulty, language);
+
+        if (generatedQuestions.length === 0) {
+            console.warn('⚠️  No questions generated. Check AI configuration and API quota.');
+            process.exit(0);
+        }
+
+        console.log(`✅ Generated ${generatedQuestions.length} questions`);
+
+        // Save questions to database
+        let savedCount = 0;
+        let duplicateCount = 0;
+
+        for (const q of generatedQuestions) {
+            // Check for duplicates
+            const existing = await QuestionBankModel.findOne({
+                question: q.question
+            });
+
+            if (existing) {
+                console.log('⏭️  Skipping duplicate question:', q.question.substring(0, 50));
+                duplicateCount++;
+                continue;
+            }
+
+            // Save new question
+            await QuestionBankModel.create(q);
+            console.log('💾 Saved question:', q.question.substring(0, 50));
+            savedCount++;
+        }
+
+        // Summary
+        console.log('\n✨ Seed complete!');
+        console.log('📊 Results:');
+        console.log(`   - Generated: ${generatedQuestions.length}`);
+        console.log(`   - Saved: ${savedCount}`);
+        console.log(`   - Duplicates skipped: ${duplicateCount}`);
+
+        const newTotal = currentCount + savedCount;
+        console.log(`📚 Total questions in database: ${newTotal}`);
+
+        // Language breakdown
+        const langCount = savedCount > 0 ? await QuestionBankModel.countDocuments({ language }) : 0;
+        console.log(`\n📊 ${langText} questions in database: ${langCount}`);
+
         process.exit(0);
     } catch (error) {
         console.error('❌ Error seeding questions:', error);
@@ -231,4 +111,53 @@ async function seedQuestions() {
     }
 }
 
-seedQuestions();
+// Parse command line arguments
+function parseArgs(): SeedOptions {
+    const args = process.argv.slice(2);
+    
+    const options: SeedOptions = {
+        count: 10,
+        language: 'english',
+        category: undefined,
+        difficulty: undefined
+    };
+
+    for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        
+        if (arg === '--thai') {
+            options.language = 'thai';
+        } else if (arg === '--count' || arg === '-n') {
+            const count = parseInt(args[++i] || '10', 10);
+            if (!isNaN(count) && count > 0) {
+                options.count = count;
+            }
+        } else if (arg === '--category' || arg === '-c') {
+            options.category = args[++i];
+        } else if (arg === '--difficulty' || arg === '-d') {
+            const diff = args[++i] as 'easy' | 'medium' | 'hard';
+            if (['easy', 'medium', 'hard'].includes(diff)) {
+                options.difficulty = diff;
+            }
+        } else if (!arg.startsWith('--') && !arg.startsWith('-')) {
+            // Positional argument (count)
+            const count = parseInt(arg, 10);
+            if (!isNaN(count) && count > 0) {
+                options.count = count;
+            }
+        }
+    }
+
+    return options;
+}
+
+// Main execution
+const options = parseArgs();
+
+const langText = options.language === 'thai' ? 'Thai' : 'English';
+const catText = options.category ? ` (${options.category})` : '';
+const diffText = options.difficulty ? ` [${options.difficulty}]` : '';
+
+console.log('🤖 Mode: AI Question Generation');
+console.log(`📝 Generating ${options.count} ${langText}${catText}${diffText} questions with Gemini AI\n`);
+seedAIQuestions(options);

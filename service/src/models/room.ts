@@ -40,7 +40,7 @@ export interface IRoom extends Document {
     currentRound?: number;
     question?: string | null;
     correctAnswer?: string | null;
-    fakeAnswersDistribution?: Map<string, string>; // playerId -> fakeAnswer
+    fakeAnswersDistribution?: Map<string, {answer: string, hint: string}>; // playerId -> fakeAnswer with hint
     eliminatedPlayers?: string[]; // playerIds already eliminated
     currentTempPoints?: number; // Guesser's temporary points
     scores?: Map<string, {

@@ -1,4 +1,4 @@
-import { QuestionBankModel } from '../models/question-bank';
+import { QuestionBankModel, IFakeAnswer } from '../models/question-bank';
 import { logger } from '../lib/logger';
 
 /**
@@ -16,7 +16,7 @@ export async function getRandomQuestion(
 ): Promise<{
     question: string;
     correctAnswer: string;
-    fakeAnswers: string[];
+    fakeAnswers: IFakeAnswer[];
 } | null> {
     try {
         // Build query with filters

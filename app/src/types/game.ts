@@ -13,12 +13,20 @@ export type GameRole = 'guesser' | 'blueFish' | 'redFish';
 export type RoomStatus = 'lobby' | 'playing' | 'guessing' | 'round_end' | 'completed';
 
 /**
+ * Fake Answer with Lie Hint
+ */
+export interface FakeAnswer {
+    answer: string;
+    hint: string;
+}
+
+/**
  * Question data structure
  */
 export interface Question {
     question: string;
     correctAnswer?: string;
-    fakeAnswers?: string[];
+    fakeAnswers?: FakeAnswer[];
 }
 
 /**
@@ -60,6 +68,7 @@ export interface GameRoomState {
     }>;
     question?: string | null;
     correctAnswer?: string | null;
+    fakeAnswersDistribution?: Record<string, FakeAnswer>; // playerId -> {answer, hint}
     currentRound?: number;
     lastGuesserId?: string | null;
     eliminatedPlayers?: string[];
