@@ -40,6 +40,8 @@ export default function RoomPage() {
         reason: string;
         totalPoints: number;
     }>>([]);
+    const [gameDifficulty, setGameDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
+    const [gameLanguage, setGameLanguage] = useState<'english' | 'thai'>('english');
     const wsRef = useRef<WebSocket | null>(null);
 
     // Connect to WebSocket
@@ -206,6 +208,15 @@ export default function RoomPage() {
                         setMyAnswer('');
                         setMyLieSuggestion('');
                         break;
+                    case 'game_settings_updated':
+                        setRoomState(message.room);
+                        if (message.difficulty) {
+                            setGameDifficulty(message.difficulty);
+                        }
+                        if (message.language) {
+                            setGameLanguage(message.language);
+                        }
+                        break;
                     case 'error':
                         console.error('WebSocket error:', message.message);
                         setError(message.message);
@@ -305,6 +316,16 @@ export default function RoomPage() {
             }));
         }
         setRankings([]);
+    };
+
+    // Handle update game settings (admin only, lobby phase only)
+    const handleUpdateSettings = (difficulty?: 'easy' | 'medium' | 'hard', language?: 'english' | 'thai') => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+            const payload: any = { type: 'update_game_settings' };
+            if (difficulty) payload.difficulty = difficulty;
+            if (language) payload.language = language;
+            wsRef.current.send(JSON.stringify(payload));
+        }
     };
     useEffect(() => {
         if (!deviceId) return;
@@ -688,6 +709,76 @@ export default function RoomPage() {
                                     ? "When ready, start the game. Need at least 4 players."
                                     : "Waiting for admin to start the game..."}
                             </p>
+
+                            {/* Game Settings - Admin Only */}
+                            {isAdmin && (
+                                <div className="bg-gray-50 rounded-2xl p-6 mb-8 w-full max-w-md">
+                                    <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center justify-center gap-2">
+                                        <span>⚙️</span> Game Settings
+                                    </h3>
+                                    <div className="space-y-4">
+                                        {/* Difficulty Setting */}
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Difficulty
+                                            </label>
+                                            <select
+                                                value={gameDifficulty}
+                                                onChange={(e) => handleUpdateSettings(e.target.value as 'easy' | 'medium' | 'hard')}
+                                                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none bg-white"
+                                            >
+                                                <option value="easy">🟢 Easy</option>
+                                                <option value="medium">🟡 Medium</option>
+                                                <option value="hard">🔴 Hard</option>
+                                            </select>
+                                        </div>
+
+                                        {/* Language Setting */}
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Language
+                                            </label>
+                                            <select
+                                                value={gameLanguage}
+                                                onChange={(e) => handleUpdateSettings(undefined, e.target.value as 'english' | 'thai')}
+                                                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none bg-white"
+                                            >
+                                                <option value="english">🇬🇧 English</option>
+                                                <option value="thai">🇹🇭 Thai</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Game Settings - Non-Admin (Read-Only) */}
+                            {!isAdmin && (
+                                <div className="bg-gray-50 rounded-2xl p-6 mb-8 w-full max-w-md">
+                                    <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center justify-center gap-2">
+                                        <span>⚙️</span> Game Settings
+                                    </h3>
+                                    <div className="space-y-4">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-sm font-medium text-gray-700">Difficulty:</span>
+                                            <span className="text-lg font-bold">
+                                                {gameDifficulty === 'easy' && '🟢 Easy'}
+                                                {gameDifficulty === 'medium' && '🟡 Medium'}
+                                                {gameDifficulty === 'hard' && '🔴 Hard'}
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-sm font-medium text-gray-700">Language:</span>
+                                            <span className="text-lg font-bold">
+                                                {gameLanguage === 'english' && '🇬🇧 English'}
+                                                {gameLanguage === 'thai' && '🇹🇭 Thai'}
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-gray-500 text-center mt-2">
+                                            Admin can change settings
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
 
                             {isAdmin ? (
                                 <button

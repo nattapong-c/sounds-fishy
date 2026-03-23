@@ -136,8 +136,11 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                         }
                     });
 
-                    // Get random question
-                    const questionData = await getRandomQuestion('english', 'medium');
+                    // Get random question based on room settings
+                    const questionData = await getRandomQuestion(
+                        room.language || 'english',
+                        room.difficulty || 'medium'
+                    );
                     if (!questionData) {
                         ws.send(JSON.stringify({
                             type: 'error',
@@ -303,8 +306,11 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                     room.lastGuesserId = roleAssignment.guesserId;
                     room.currentRound = (room.currentRound || 1) + 1;
 
-                    // Get new question
-                    const questionData = await getRandomQuestion('english', 'medium');
+                    // Get new question based on room settings
+                    const questionData = await getRandomQuestion(
+                        room.language || 'english',
+                        room.difficulty || 'medium'
+                    );
                     if (!questionData) {
                         ws.send(JSON.stringify({
                             type: 'error',
@@ -504,6 +510,74 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                     });
                     ws.publish(`room:${roomId}`, updatePayload);
                     ws.send(updatePayload);
+                }
+
+                /**
+                 * Update Game Settings (admin only, lobby phase only)
+                 */
+                else if (parsedMessage.type === 'update_game_settings') {
+                    // Validate admin
+                    if (!player.isAdmin) {
+                        ws.send(JSON.stringify({
+                            type: 'error',
+                            message: 'Only admin can update game settings'
+                        }));
+                        return;
+                    }
+
+                    // Validate room status (only in lobby)
+                    if (room.status !== 'lobby') {
+                        ws.send(JSON.stringify({
+                            type: 'error',
+                            message: 'Can only update settings in lobby phase'
+                        }));
+                        return;
+                    }
+
+                    const { difficulty, language } = parsedMessage;
+
+                    // Validate difficulty
+                    if (difficulty && !['easy', 'medium', 'hard'].includes(difficulty)) {
+                        ws.send(JSON.stringify({
+                            type: 'error',
+                            message: 'Invalid difficulty. Must be: easy, medium, or hard'
+                        }));
+                        return;
+                    }
+
+                    // Validate language
+                    if (language && !['english', 'thai'].includes(language)) {
+                        ws.send(JSON.stringify({
+                            type: 'error',
+                            message: 'Invalid language. Must be: english or thai'
+                        }));
+                        return;
+                    }
+
+                    // Update settings
+                    if (difficulty) {
+                        room.difficulty = difficulty;
+                    }
+                    if (language) {
+                        room.language = language;
+                    }
+                    await room.save();
+
+                    logger.info({
+                        roomId,
+                        difficulty: room.difficulty,
+                        language: room.language
+                    }, 'Admin updated game settings');
+
+                    // Broadcast settings update to all players
+                    const payload = JSON.stringify({
+                        type: 'game_settings_updated',
+                        difficulty: room.difficulty,
+                        language: room.language,
+                        room: room.toJSON()
+                    });
+                    ws.publish(`room:${roomId}`, payload);
+                    ws.send(payload);
                 }
             }
 

@@ -58,6 +58,9 @@ export interface IRoom extends Document {
         winner: 'guesser' | 'blueFish' | 'redFish';
         pointsAwarded: number;
     }>;
+    // Game settings (configurable by admin before game starts)
+    difficulty?: 'easy' | 'medium' | 'hard';
+    language?: 'english' | 'thai';
     expiresAt?: Date; // Room expiration time (12 hours after creation)
     createdAt: Date;
     updatedAt: Date;
@@ -131,6 +134,17 @@ export const RoomSchema = new Schema<IRoom>({
             pointsAwarded: Number
         }],
         default: []
+    },
+    // Game settings (configurable by admin before game starts)
+    difficulty: {
+        type: String,
+        enum: ['easy', 'medium', 'hard'],
+        default: 'medium'
+    },
+    language: {
+        type: String,
+        enum: ['english', 'thai'],
+        default: 'english'
     }
 }, {
     timestamps: true
