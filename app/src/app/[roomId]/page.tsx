@@ -23,7 +23,7 @@ export default function RoomPage() {
     const [showEliminationView, setShowEliminationView] = useState(false);
     const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
-    const [rankings, setRankings] = useState<Array<{ position: number; playerId: string; playerName: string; totalPoints: number }>>([]);
+    const [rankings, setRankings] = useState<Array<{ position: number; playerId: string; playerName: string; totalPoints: number; isTied: boolean }>>([]);
     const wsRef = useRef<WebSocket | null>(null);
 
     // Connect to WebSocket
