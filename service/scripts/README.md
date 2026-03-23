@@ -15,19 +15,30 @@ This script uses AI to automatically generate trivia questions with:
 ## Prerequisites
 
 1. **MongoDB** - Must be running and accessible
-2. **Gemini API Key** - Required for AI generation
+2. **AI API Key** - Required for question generation (supports Gemini, OpenAI, etc.)
 
 ### Setup
 
 1. Create `.env` file in the `service` directory:
 ```bash
 # service/.env
-GEMINI_API_KEY=your_api_key_here
-GEMINI_MODEL=gemini-2.5-flash
+
+# For Gemini (recommended)
+AI_API_KEY=your_gemini_api_key_here
+AI_MODEL=gemini-2.5-flash
+AI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+
+# For OpenAI (alternative)
+# AI_API_KEY=your_openai_api_key_here
+# AI_MODEL=gpt-4o-mini
+# AI_BASE_URL= (leave empty for default OpenAI endpoint)
+
 MONGO_URI=mongodb://localhost:27017/sounds-fishy
 ```
 
-2. Get a Gemini API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
+2. Get an API key:
+   - **Gemini**: [Google AI Studio](https://aistudio.google.com/app/apikey)
+   - **OpenAI**: [OpenAI Platform](https://platform.openai.com/api-keys)
 
 3. Install dependencies:
 ```bash
@@ -260,19 +271,34 @@ db.questionbanks.deleteMany({})
 
 ## API Reference
 
-### Gemini Model
+### Supported AI Providers
 
+The system uses OpenAI-compatible APIs, supporting multiple providers:
+
+**Gemini (Recommended)**
 - **Model**: `gemini-2.5-flash`
-- **Provider**: Google Generative AI
+- **Base URL**: `https://generativelanguage.googleapis.com/v1beta/openai/`
 - **Rate Limit**: 60 requests per minute (free tier)
+- **Cost**: Free (with generous limits)
+
+**OpenAI**
+- **Model**: `gpt-4o-mini`, `gpt-3.5-turbo`, etc.
+- **Base URL**: (default, no need to specify)
+- **Rate Limit**: Varies by tier
+- **Cost**: Pay-per-use
+
+**Other Providers**
+- Any OpenAI-compatible API endpoint
+- Configure via `AI_BASE_URL` environment variable
 
 ### Question Generation
 
 The AI uses specialized prompts to generate:
 - Engaging questions
-- Plausible fake answers
-- Truthful-sounding hints
+- 8 plausible fake answers (for 8 players)
+- Truthful-sounding hints for each fake answer
 - Category-appropriate content
+- Language-specific content (English/Thai)
 
 ## Support
 

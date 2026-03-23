@@ -10,9 +10,9 @@
   },
   "dependencies": {
     "@elysiajs/cors": "^1.0.0",
-    "@google/generative-ai": "^0.24.1",
     "elysia": "^1.0.0",
     "mongoose": "^8.0.0",
+    "openai": "^6.32.0",
     "pino": "^8.17.0",
     "pino-pretty": "^10.3.0"
   },
