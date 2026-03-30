@@ -51,7 +51,6 @@ export async function generateQuestions(
                 }
             ],
             temperature: 0.7,
-            max_tokens: count * 2000 // Scale tokens based on count
         });
 
         const text = completion.choices[0]?.message?.content || '';
