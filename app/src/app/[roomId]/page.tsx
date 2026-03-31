@@ -17,7 +17,7 @@ export default function RoomPage() {
     const [myRole, setMyRole] = useState<GameRole | null>(null);
     const [myQuestion, setMyQuestion] = useState<string>('');
     const [myAnswer, setMyAnswer] = useState<string>('');
-    const [myLieSuggestion, setMyLieSuggestion] = useState<string>('');
+    const [myHint, setMyHint] = useState<string>('');
     const [error, setError] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
     const [showEliminationView, setShowEliminationView] = useState(false);
@@ -126,8 +126,8 @@ export default function RoomPage() {
                             if (message.fakeAnswer) {
                                 setMyAnswer(message.fakeAnswer);
                             }
-                            if (message.lieSuggestion) {
-                                setMyLieSuggestion(message.lieSuggestion);
+                            if (message.hint) {
+                                setMyHint(message.hint);
                             }
                             console.log('Game reconnected - My role:', message.role);
                         } else if (message.playerDataMap) {
@@ -144,8 +144,8 @@ export default function RoomPage() {
                                     if (myData.fakeAnswer) {
                                         setMyAnswer(myData.fakeAnswer);
                                     }
-                                    if (myData.lieSuggestion) {
-                                        setMyLieSuggestion(myData.lieSuggestion);
+                                    if (myData.hint) {
+                                        setMyHint(myData.hint);
                                     }
                                     console.log('Game started - My role:', myData.role);
                                 }
@@ -169,8 +169,8 @@ export default function RoomPage() {
                             if (message.fakeAnswer) {
                                 setMyAnswer(message.fakeAnswer);
                             }
-                            if (message.lieSuggestion) {
-                                setMyLieSuggestion(message.lieSuggestion);
+                            if (message.hint) {
+                                setMyHint(message.hint);
                             }
                         } else if (message.playerDataMap) {
                             // New round: playerDataMap structure
@@ -186,8 +186,8 @@ export default function RoomPage() {
                                     if (myData.fakeAnswer) {
                                         setMyAnswer(myData.fakeAnswer);
                                     }
-                                    if (myData.lieSuggestion) {
-                                        setMyLieSuggestion(myData.lieSuggestion);
+                                    if (myData.hint) {
+                                        setMyHint(myData.hint);
                                     }
                                 }
                             }
@@ -206,7 +206,7 @@ export default function RoomPage() {
                         setMyRole(null);
                         setMyQuestion('');
                         setMyAnswer('');
-                        setMyLieSuggestion('');
+                        setMyHint('');
                         break;
                     case 'game_settings_updated':
                         setRoomState(message.room);
@@ -932,18 +932,16 @@ export default function RoomPage() {
                                         <p className="text-gray-500 text-sm uppercase mb-2">Question</p>
                                         <p className="text-xl font-bold text-gray-900 mb-4">{myQuestion}</p>
 
-                                        <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4 mb-4">
-                                            <p className="text-red-600 text-sm font-bold uppercase mb-1">🎯 YOUR ANSWER (Must Say This!)</p>
-                                            <p className="text-lg font-semibold text-gray-900">{myAnswer}</p>
-                                        </div>
-
-                                        {myLieSuggestion && (
-                                            <div className="bg-gradient-to-r from-yellow-50 to-amber-50 border-2 border-yellow-400 rounded-lg p-4">
-                                                <p className="text-yellow-700 text-sm font-bold uppercase mb-2">💡 Story Suggestion</p>
-                                                <p className="text-gray-800 text-base italic">"{myLieSuggestion}"</p>
-                                                <p className="text-gray-500 text-xs mt-2">Use this hint to tell a convincing story!</p>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                            <div className="bg-red-50 border-2 border-red-300 rounded-xl p-4">
+                                                <p className="text-red-600 text-xs font-bold uppercase mb-1">🎯 YOUR ANSWER</p>
+                                                <p className="text-lg font-semibold text-gray-900">{myAnswer}</p>
                                             </div>
-                                        )}
+                                            <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-4">
+                                                <p className="text-orange-600 text-xs font-bold uppercase mb-1">📝 YOUR HINT</p>
+                                                <p className="text-lg font-semibold text-gray-900">{myHint}</p>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <p className="text-gray-600 text-sm">

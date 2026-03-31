@@ -38,7 +38,7 @@ export interface GamePayload {
     question: string;
     correctAnswer?: string;      // Blue Fish only
     fakeAnswer?: string;         // Red Fish only
-    lieSuggestion?: string;      // Red Fish only
+    hint?: string;               // Red Fish only (matching their fake answer)
 }
 
 /**
@@ -123,7 +123,7 @@ export interface RoundStartPayload {
         question: string;
         correctAnswer?: string;
         fakeAnswer?: string;
-        lieSuggestion?: string;
+        hint?: string;
     }>;
 }
 

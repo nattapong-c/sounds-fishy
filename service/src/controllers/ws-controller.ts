@@ -69,12 +69,10 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                 } else if (player.inGameRole === 'redFish' && room.fakeAnswersDistribution) {
                     const fakeAnswerObj = room.fakeAnswersDistribution.get(player.id);
                     const fakeAnswer = fakeAnswerObj?.answer || '';
-                    // Get lie suggestion from another Red Fish
-                    const lieSuggestion = Array.from(room.fakeAnswersDistribution.values())
-                        .map(fa => fa.hint)
-                        .find(hint => hint !== fakeAnswerObj?.hint) || fakeAnswerObj?.hint || '';
+                    const hint = fakeAnswerObj?.hint || '';
+                    
                     payload.fakeAnswer = fakeAnswer;
-                    payload.lieSuggestion = lieSuggestion;
+                    payload.hint = hint;
                 }
 
                 ws.send(JSON.stringify(payload));
@@ -181,7 +179,7 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                         question: string;
                         correctAnswer?: string;
                         fakeAnswer?: string;
-                        lieSuggestion?: string;
+                        hint?: string;
                     }> = {};
 
                     // Guesser data
@@ -200,14 +198,22 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                     // Red Fish data (reuse shuffledFakes from above)
                     roleAssignment.redFishIds.forEach((playerId, index) => {
                         const fakeAnswer = shuffledFakes[index % shuffledFakes.length];
-                        // Get a hint from another Red Fish's answer (for lie suggestion)
-                        const lieSuggestion = shuffledFakes[(index + 1) % shuffledFakes.length]?.hint || fakeAnswer.hint;
+                        
                         playerDataMap[playerId] = {
                             role: 'redFish',
                             question: room.question!,
                             fakeAnswer: fakeAnswer.answer,
-                            lieSuggestion
+                            hint: fakeAnswer.hint
                         };
+
+                        // Validation logging
+                        logger.info({
+                            roomId,
+                            playerId,
+                            role: 'redFish',
+                            answer: fakeAnswer.answer,
+                            hintMatched: fakeAnswer.hint === playerDataMap[playerId].hint
+                        }, 'Assigned Red Fish answer-hint pair');
                     });
 
                     // Broadcast single message with all player data
@@ -339,7 +345,7 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                         question: string;
                         correctAnswer?: string;
                         fakeAnswer?: string;
-                        lieSuggestion?: string;
+                        hint?: string;
                     }> = {};
 
                     playerDataMap[roleAssignment.guesserId] = {
@@ -355,14 +361,21 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
 
                     roleAssignment.redFishIds.forEach((playerId, index) => {
                         const fakeAnswer = shuffledFakes[index % shuffledFakes.length];
-                        // Get a hint from another Red Fish's answer (for lie suggestion)
-                        const lieSuggestion = shuffledFakes[(index + 1) % shuffledFakes.length]?.hint || fakeAnswer.hint;
                         playerDataMap[playerId] = {
                             role: 'redFish',
                             question: room.question!,
                             fakeAnswer: fakeAnswer.answer,
-                            lieSuggestion
+                            hint: fakeAnswer.hint
                         };
+
+                        // Validation logging
+                        logger.info({
+                            roomId,
+                            playerId,
+                            role: 'redFish',
+                            answer: fakeAnswer.answer,
+                            hintMatched: fakeAnswer.hint === playerDataMap[playerId].hint
+                        }, 'Assigned Red Fish answer-hint pair for next round');
                     });
 
                     const payload = {
