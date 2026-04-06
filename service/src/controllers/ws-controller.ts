@@ -782,6 +782,85 @@ export const wsController = new Elysia({ prefix: '/ws/rooms' })
                     tempPoints: room.currentTempPoints
                 }, 'Guess submitted with elimination result');
             }
+
+            /**
+             * Stop Guessing (Guesser chooses to bank points and end round)
+             */
+            if (parsedMessage.type === 'stop_guessing') {
+                // Validate sender is current Guesser
+                if (player.inGameRole !== 'guesser') {
+                    logger.warn({ roomId, deviceId, role: player.inGameRole }, 'Non-guesser tried to stop guessing');
+                    ws.send(JSON.stringify({
+                        type: 'error',
+                        message: 'Only Guesser can stop guessing'
+                    }));
+                    return;
+                }
+
+                // Validate game is in playing state
+                if (room.status !== 'playing') {
+                    ws.send(JSON.stringify({
+                        type: 'error',
+                        message: 'Can only stop during guessing phase'
+                    }));
+                    return;
+                }
+
+                // Must have at least 1 point to stop (optional, but makes sense)
+                if ((room.currentTempPoints || 0) === 0) {
+                    ws.send(JSON.stringify({
+                        type: 'error',
+                        message: 'Must eliminate at least one Red Fish to bank points'
+                    }));
+                    return;
+                }
+
+                logger.info({ roomId, guesserId: player.id, tempPoints: room.currentTempPoints }, 'Guesser chose to stop and bank points');
+
+                const guesserId = player.id;
+                const blueFishId = room.players.find(p => p.inGameRole === 'blueFish')?.id;
+                const redFishIds = room.players.filter(p => p.inGameRole === 'redFish').map(p => p.id);
+
+                if (guesserId && blueFishId) {
+                    // Award points for "stopped" scenario
+                    awardRoundPoints(
+                        room.scores!,
+                        guesserId,
+                        blueFishId,
+                        redFishIds,
+                        'stopped',
+                        room.currentTempPoints || 0,
+                        room.eliminatedPlayers || []
+                    );
+
+                    // Update role counts
+                    updateRoleCounts(room.scores!, guesserId, blueFishId, redFishIds);
+                }
+
+                // Transition to round_end
+                room.status = 'round_end';
+                await room.save();
+
+                // Build stop payload
+                const stopPayload = {
+                    type: 'guess_stopped',
+                    guesserName: player.name,
+                    pointsBanked: room.currentTempPoints,
+                    room: room.toJSON(),
+                    pointsBreakdown: generatePointsBreakdown(
+                        room.players,
+                        room.scores!,
+                        'stopped',
+                        room.currentTempPoints || 0,
+                        room.eliminatedPlayers || []
+                    )
+                };
+
+                ws.publish(`room:${roomId}`, JSON.stringify(stopPayload));
+                ws.send(JSON.stringify(stopPayload));
+
+                logger.info({ roomId, bankedPoints: room.currentTempPoints }, 'Guesser stopped and round ended');
+            }
         },
         async close(ws) {
             const { roomId } = ws.data.params;

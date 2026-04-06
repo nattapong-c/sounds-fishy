@@ -35,9 +35,9 @@ export function awardRoundPoints(
     guesserId: string,
     blueFishId: string,
     redFishIds: string[],
-    winner: 'guesser' | 'blueFish' | 'redFish',
+    winner: 'guesser' | 'blueFish' | 'redFish' | 'stopped',
     tempPoints: number,
-    eliminatedRedFishIds?: string[] // Red Fish who were eliminated before Blue Fish
+    eliminatedRedFishIds?: string[] // Red Fish who were eliminated before round end
 ): void {
     logger.info({ guesserId, blueFishId, redFishIds, winner, tempPoints, eliminatedRedFishIds }, 'Awarding round points');
 
@@ -73,6 +73,37 @@ export function awardRoundPoints(
             if (redFishScore) {
                 redFishScore.totalPoints += 1;
                 logger.info({ redFishId, pointsAwarded: 1 }, 'Red Fish awarded survival bonus point');
+            }
+        });
+    } else if (winner === 'stopped') {
+        // Guesser chose to stop voluntarily
+        // 1. Guesser gets their accumulated temp points
+        const guesserScore = scores.get(guesserId);
+        if (guesserScore) {
+            guesserScore.totalPoints += tempPoints;
+            logger.info({ guesserId, pointsAwarded: tempPoints }, 'Guesser awarded banked points');
+        }
+
+        // 2. All surviving fish (Blue and Red) get 1 point
+        const eliminatedSet = new Set(eliminatedRedFishIds || []);
+
+        // Blue Fish survivor bonus
+        if (!eliminatedSet.has(blueFishId)) {
+            const blueFishScore = scores.get(blueFishId);
+            if (blueFishScore) {
+                blueFishScore.totalPoints += 1;
+                logger.info({ blueFishId, pointsAwarded: 1 }, 'Blue Fish awarded survival bonus (guesser stopped)');
+            }
+        }
+
+        // Red Fish survivor bonus
+        redFishIds.forEach(redFishId => {
+            if (!eliminatedSet.has(redFishId)) {
+                const redFishScore = scores.get(redFishId);
+                if (redFishScore) {
+                    redFishScore.totalPoints += 1;
+                    logger.info({ redFishId, pointsAwarded: 1 }, 'Red Fish awarded survival bonus (guesser stopped)');
+                }
             }
         });
     }
@@ -158,9 +189,9 @@ export interface PointsBreakdown {
 export function generatePointsBreakdown(
     players: Array<{ id: string; name: string; inGameRole?: string | null }>,
     scores: Map<string, { totalPoints: number; tempPoints: number; roundsAsGuesser: number; roundsAsBlueFish: number; roundsAsRedFish: number }>,
-    winner: 'guesser' | 'blueFish' | 'redFish',
+    winner: 'guesser' | 'blueFish' | 'redFish' | 'stopped',
     tempPoints: number,
-    eliminatedRedFishIds?: string[] // Red Fish who were eliminated before Blue Fish
+    eliminatedRedFishIds?: string[] // Red Fish who were eliminated before round end
 ): PointsBreakdown[] {
     const breakdown: PointsBreakdown[] = [];
     const eliminatedSet = new Set(eliminatedRedFishIds || []);
@@ -176,6 +207,9 @@ export function generatePointsBreakdown(
             if (winner === 'guesser') {
                 pointsEarned = tempPoints;
                 reason = `Guesser: ${tempPoints} temp point${tempPoints !== 1 ? 's' : ''} converted`;
+            } else if (winner === 'stopped') {
+                pointsEarned = tempPoints;
+                reason = `Guesser: Banked ${tempPoints} point${tempPoints !== 1 ? 's' : ''}`;
             } else {
                 pointsEarned = 0;
                 reason = 'Guesser: Wrong guess, points reset';
@@ -184,6 +218,9 @@ export function generatePointsBreakdown(
             if (winner === 'guesser') {
                 pointsEarned = 1;
                 reason = 'Blue Fish: 1 survival bonus';
+            } else if (winner === 'stopped') {
+                pointsEarned = 1;
+                reason = 'Blue Fish: 1 survivor bonus (Guesser stopped)';
             } else {
                 pointsEarned = 0;
                 reason = 'Blue Fish: Eliminated (no points)';
@@ -192,6 +229,14 @@ export function generatePointsBreakdown(
             if (winner === 'guesser') {
                 pointsEarned = 0;
                 reason = 'Red Fish: Eliminated (no points)';
+            } else if (winner === 'stopped') {
+                if (eliminatedSet.has(player.id)) {
+                    pointsEarned = 0;
+                    reason = 'Red Fish: Eliminated (no points)';
+                } else {
+                    pointsEarned = 1;
+                    reason = 'Red Fish: 1 survivor bonus (Guesser stopped)';
+                }
             } else {
                 // Blue Fish eliminated - check if this Red Fish survived
                 if (eliminatedSet.has(player.id)) {

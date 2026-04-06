@@ -23,8 +23,14 @@ export default function RoomPage() {
     const [showEliminationView, setShowEliminationView] = useState(false);
     const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
+    const [showStopConfirmModal, setShowStopConfirmModal] = useState(false);
     const [rankings, setRankings] = useState<Array<{ position: number; playerId: string; playerName: string; totalPoints: number; isTied: boolean }>>([]);
     const [showEliminationModal, setShowEliminationModal] = useState(false);
+    const [showStopModal, setShowStopModal] = useState(false);
+    const [stopResult, setStopResult] = useState<{
+        guesserName: string;
+        pointsBanked: number;
+    } | null>(null);
     const [eliminationResult, setEliminationResult] = useState<{
         eliminatedPlayerName: string;
         eliminatedPlayerRole: GameRole | null;
@@ -110,6 +116,22 @@ export default function RoomPage() {
                         setShowEliminationView(false);
                         setSelectedPlayerId(null);
                         setShowConfirmModal(false);
+                        setShowStopConfirmModal(false);
+                        break;
+                    case 'guess_stopped':
+                        setRoomState(message.room);
+                        setStopResult({
+                            guesserName: message.guesserName,
+                            pointsBanked: message.pointsBanked
+                        });
+                        setShowStopModal(true);
+                        if (message.pointsBreakdown) {
+                            setPointsBreakdown(message.pointsBreakdown);
+                        }
+                        setShowEliminationView(false);
+                        setSelectedPlayerId(null);
+                        setShowConfirmModal(false);
+                        setShowStopConfirmModal(false);
                         break;
                     case 'game_started':
                         // Handle role-specific game start data
@@ -203,6 +225,9 @@ export default function RoomPage() {
                         setRoomState(message.room);
                         setRankings([]);
                         setPointsBreakdown([]);
+                        setStopResult(null);
+                        setShowStopModal(false);
+                        setShowStopConfirmModal(false);
                         setMyRole(null);
                         setMyQuestion('');
                         setMyAnswer('');
@@ -288,6 +313,16 @@ export default function RoomPage() {
         }
         setShowConfirmModal(false);
         setSelectedPlayerId(null);
+    };
+
+    // Handle stop guessing (bank points)
+    const handleStopGuessing = () => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({
+                type: 'stop_guessing'
+            }));
+        }
+        setShowStopConfirmModal(false);
     };
 
     // Handle next round (admin only)
@@ -612,11 +647,95 @@ export default function RoomPage() {
         );
     };
 
+    // Stop Modal Component
+    const StopModal = () => {
+        if (!stopResult) return null;
+
+        const { guesserName, pointsBanked } = stopResult;
+        const isGuesser = myRole === 'guesser';
+
+        // Auto-close modal for non-Guesser players after 5 seconds
+        useEffect(() => {
+            if (!isGuesser) {
+                const timer = setTimeout(() => {
+                    setShowStopModal(false);
+                }, 5000);
+                return () => clearTimeout(timer);
+            }
+        }, [isGuesser]);
+
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+                <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full transform transition-all scale-100">
+                    <div className="text-center mb-6">
+                        <div className="text-7xl mb-4">💰</div>
+                        <h2 className="text-3xl font-bold mb-2">Round Stopped!</h2>
+                        <p className="text-gray-600 text-lg">
+                            <span className="font-bold text-blue-600">{guesserName}</span> chose to stop and bank points.
+                        </p>
+                    </div>
+
+                    <div className="bg-green-50 rounded-2xl p-6 mb-6">
+                        <p className="text-green-600 font-bold text-xl mb-2 text-center">
+                            +{pointsBanked} Point{pointsBanked !== 1 ? 's' : ''} Banked
+                        </p>
+                        <p className="text-gray-600 text-center">
+                            All surviving fish get 1 point!
+                        </p>
+                    </div>
+
+                    <button
+                        onClick={() => setShowStopModal(false)}
+                        className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-xl font-bold py-4 rounded-xl transition-all"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        );
+    };
+
     // Show lobby view
     return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 p-4 md:p-8">
             {/* Elimination Modal */}
             {showEliminationModal && <EliminationModal />}
+
+            {/* Stop Modal */}
+            {showStopModal && <StopModal />}
+
+            {/* Stop Confirm Modal */}
+            {showStopConfirmModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowStopConfirmModal(false)}>
+                    <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                        <div className="text-center mb-6">
+                            <div className="text-5xl mb-4">💰</div>
+                            <h3 className="text-2xl font-bold text-gray-800 mb-2">Bank Points?</h3>
+                            <p className="text-gray-600">
+                                Stop now and keep your <span className="font-bold text-blue-600">{roomState?.currentTempPoints} points</span>?
+                                <br />
+                                <span className="text-sm text-orange-600 mt-2 block">
+                                    ⚠️ All surviving fish will get 1 point.
+                                </span>
+                            </p>
+                        </div>
+                        <div className="flex gap-4">
+                            <button
+                                onClick={handleStopGuessing}
+                                className="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-bold py-3 px-6 rounded-xl transition-all"
+                            >
+                                ✓ Bank Points
+                            </button>
+                            <button
+                                onClick={() => setShowStopConfirmModal(false)}
+                                className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-6 rounded-xl transition-all"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Header */}
             <header className="flex flex-col md:flex-row justify-between items-center mb-8 pb-4 gap-4 bg-white rounded-2xl shadow-lg p-4">
@@ -835,16 +954,30 @@ export default function RoomPage() {
                                         </div>
                                     </div>
 
-                                    {/* Go Eliminate Button */}
-                                    <button
-                                        onClick={handleShowElimination}
-                                        className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-xl font-bold tracking-wide py-4 px-12 rounded-xl transition-all shadow-lg"
-                                    >
-                                        <span className="flex items-center justify-center gap-3">
-                                            <span className="text-3xl">⚡</span>
-                                            Go Eliminate!
-                                        </span>
-                                    </button>
+                                    {/* Go Eliminate & Stop Button */}
+                                    <div className="flex flex-col md:flex-row gap-4">
+                                        <button
+                                            onClick={handleShowElimination}
+                                            className="flex-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-xl font-bold tracking-wide py-4 px-12 rounded-xl transition-all shadow-lg"
+                                        >
+                                            <span className="flex items-center justify-center gap-3">
+                                                <span className="text-3xl">⚡</span>
+                                                Go Eliminate!
+                                            </span>
+                                        </button>
+
+                                        {(roomState?.currentTempPoints || 0) > 0 && (
+                                            <button
+                                                onClick={() => setShowStopConfirmModal(true)}
+                                                className="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white text-xl font-bold tracking-wide py-4 px-12 rounded-xl transition-all shadow-lg"
+                                            >
+                                                <span className="flex items-center justify-center gap-3">
+                                                    <span className="text-3xl">💰</span>
+                                                    Bank Points
+                                                </span>
+                                            </button>
+                                        )}
+                                    </div>
 
                                     {/* Elimination View */}
                                     {showEliminationView && (
